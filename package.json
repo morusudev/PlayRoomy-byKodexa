@@ -1,0 +1,51 @@
+{
+  "name": "playroomy",
+  "description": "Watch party sincronizado para YouTube. Open source by Kodexa.",
+  "private": false,
+  "version": "1.0.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/morusudev/PlayRoomy-byKodexa.git"
+  },
+  "author": "Kodexa Labs",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite --host --config vite.dev.config.ts",
+    "dev:tunnel": "node scripts/dev-tunnel.mjs",
+    "share": "node scripts/dev-tunnel.mjs",
+    "build": "tsc -p tsconfig.app.json --noEmit && vite build",
+    "lint": "oxlint",
+    "pack:discloud": "node scripts/pack-discloud.mjs",
+    "preview": "vite preview --host",
+    "start": "tsx server/production.ts",
+    "start:api": "npm run dev --prefix backend"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.38.0",
+    "nanoid": "^6.0.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.2",
+    "tailwind-merge": "^3.6.0",
+    "ws": "^8.21.3",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "@vitejs/plugin-react": "^6.1.0",
+    "localtunnel": "^2.0.2",
+    "archiver": "^7.0.1",
+    "oxlint": "^1.79.0",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.13",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.2"
+  }
+}

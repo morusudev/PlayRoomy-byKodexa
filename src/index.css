@@ -1,0 +1,142 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+  --color-surface-0: #09090b;
+  --color-surface-1: #0f0f12;
+  --color-surface-2: #16161a;
+  --color-surface-3: #1c1c22;
+  --color-surface-4: #25252c;
+  --color-border: #2a2a32;
+  --color-border-subtle: #1e1e24;
+  --color-text-primary: #f4f4f5;
+  --color-text-secondary: #a1a1aa;
+  --color-text-muted: #71717a;
+  --color-accent: #3dd68c;
+  --color-accent-hover: #56e09a;
+  --color-accent-muted: #3dd68c22;
+  --color-success: #3dd68c;
+  --color-warning: #f5a524;
+  --color-danger: #f31260;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  html {
+    @apply antialiased;
+  }
+
+  body {
+    @apply bg-surface-0 text-text-primary font-sans;
+  }
+
+  ::selection {
+    @apply bg-accent/30 text-text-primary;
+  }
+
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-surface-4 rounded-full;
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Invisible native range sits on top of the custom volume track */
+.roomy-volume {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+.roomy-volume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 48px;
+  background: transparent;
+  cursor: pointer;
+}
+
+@keyframes player-flash {
+  0% {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  78% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+}
+
+@media (pointer: coarse) {
+  .roomy-volume::-webkit-slider-thumb {
+    width: 28px;
+    height: 32px;
+  }
+}
+
+@keyframes slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.home-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 55% 40% at 78% 18%, #3dd68c0a, transparent 65%);
+}
+
+.home-title {
+  font-family: var(--font-display);
+  font-weight: 400;
+}
+
+.teaser-scanlines {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 255, 255, 0.02) 2px,
+    rgba(255, 255, 255, 0.02) 4px
+  );
+}
