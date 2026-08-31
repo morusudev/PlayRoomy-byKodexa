@@ -1,53 +1,58 @@
 # PlayRoomy
 
-**Watch party sincronizado para YouTube**
+**Synchronized YouTube watch parties**
 
-by **Kodexa**
+by **[Kodexa](https://kodexalabs.com.br)**
 
-Crie uma sala, mande o link e assista com quem quiser. Play, pause, seek e playlist no mesmo tempo para todo mundo. Sem app, sem cadastro, direto no navegador.
+Create a room, share the link, and watch together. Play, pause, seek, and playlists stay in sync for everyone. No app install, no sign up, runs in the browser.
 
----
+🌐 **Live:** [playroomy.vercel.app](https://playroomy.vercel.app)
 
-## 🎬 O que é
-
-O PlayRoomy é um app web para maratonar YouTube com amigos. Um host cria a sala, os convidados entram pelo link e o vídeo fica sincronizado em tempo real.
-
-Funciona em celular, tablet e PC. Ideal para grupos no WhatsApp, Discord ou call.
+📖 **Português:** [README.pt-BR.md](./README.pt-BR.md)
 
 ---
 
-## ✨ O que dá pra fazer
+## 🎬 What is it?
 
-| Recurso | Detalhe |
+PlayRoomy is a web app to binge YouTube with friends. A host creates a room, guests join via link, and video playback stays synchronized in real time.
+
+Works on phone, tablet, and desktop. Great for WhatsApp groups, Discord, or voice calls.
+
+---
+
+## ✨ Features
+
+| Feature | Details |
 |---------|---------|
-| 🔄 Sync em tempo real | Play, pause e seek sincronizados |
-| 🔗 Convite por link | Um link, qualquer dispositivo |
-| 📋 Playlist compartilhada | Fila de vídeos para a sala inteira |
-| 💬 Chat ao vivo | Mensagens enquanto assistem |
-| 🔒 Sala com senha | Privacidade opcional |
-| ⌨️ Atalhos de teclado | Controle rápido no player |
-| 📱 Mobile friendly | Layout pensado pro celular |
+| 🔄 Real time sync | Play, pause, and seek stay aligned |
+| 🔗 Invite by link | One link, any device |
+| 📋 Shared playlist | Queue videos for the whole room |
+| 💬 Live chat | Message while you watch |
+| 🔒 Password rooms | Optional privacy |
+| ⌨️ Keyboard shortcuts | Fast player controls |
+| 📱 Mobile friendly | Layout built for phones |
 
 ---
 
-## 🏗️ Como funciona
+## 🏗️ Architecture
 
 ```
 Frontend (Vercel)          Backend (Discloud)
      │                            │
      │    WebSocket /roomy-ws     │
      └────────────────────────────┘
-              Salas em memória
+              In memory rooms
 ```
 
-O **frontend** é React + Vite + Tailwind.  
-O **backend** é Node.js + WebSocket (`ws`). Sem banco de dados: as salas existem só enquanto há gente conectada.
+**Frontend:** React + Vite + Tailwind  
+**Backend:** Node.js + WebSocket (`ws`)  
+No database. Rooms exist only while people are connected.
 
 ---
 
-## 🚀 Rodar localmente
+## 🚀 Run locally
 
-**Requisitos:** Node.js 20+
+**Requirements:** Node.js 20+
 
 ```bash
 git clone https://github.com/morusudev/PlayRoomy-byKodexa.git
@@ -55,34 +60,34 @@ cd PlayRoomy-byKodexa
 npm install
 ```
 
-Crie um `.env.local` na raiz com os valores que precisar (veja o `.env` para a lista de variáveis). O `.env.local` não vai pro Git.
+Create `.env.local` at the project root with your values (see `.env` for the variable list). `.env.local` is not committed.
 
 ```bash
 npm run dev
 ```
 
-Abra o link **https** que aparece no terminal (o Vite sobe frontend e WebSocket juntos).
+Open the **https** URL from the terminal. Local dev runs frontend and WebSocket together.
 
-### Compartilhar na internet sem deploy
+### Share from your PC without deploy
 
 ```bash
 npm run share
 ```
 
-Gera um link público temporário enquanto seu PC estiver ligado.
+Creates a temporary public link while your machine stays on.
 
 ---
 
-## 📦 Deploy em produção
+## 📦 Production deploy
 
 ### Frontend → Vercel
 
-Conecte o repositório na Vercel. O `.vercelignore` já exclui `backend/` do upload.
+Connect the GitHub repo on Vercel. `.vercelignore` excludes `backend/` from the upload.
 
 **Build:** `npm run build`  
 **Output:** `dist`
 
-Configure as variáveis no painel da Vercel (não commite valores reais no Git).
+Set environment variables in the Vercel dashboard. Do not commit real values to Git.
 
 ### Backend → Discloud
 
@@ -90,33 +95,30 @@ Configure as variáveis no painel da Vercel (não commite valores reais no Git).
 npm run pack:discloud
 ```
 
-Envie o `playroomy-discloud.zip` na Discloud (plano Platinum+, 512 MB).
+Upload `playroomy-discloud.zip` to Discloud (Platinum+ plan, 512 MB RAM).
 
-Guia completo: [DEPLOY.md](./DEPLOY.md)
-
----
-
-## ⚙️ Variáveis de ambiente
-
-O arquivo `.env` na raiz lista todas as variáveis do frontend com explicação.  
-O arquivo `backend/.env` lista as do backend.
-
-| Onde | Arquivo de referência | Onde configurar de verdade |
-|------|----------------------|----------------------------|
-| Frontend | `.env` | Painel Vercel ou `.env.local` |
-| Backend | `backend/.env` | Painel Discloud |
+Full guide: [DEPLOY.md](./DEPLOY.md)
 
 ---
 
-## 📁 Estrutura do projeto
+## ⚙️ Environment variables
+
+| Layer | Reference file | Where to set values |
+|-------|----------------|---------------------|
+| Frontend | `.env` | Vercel dashboard or `.env.local` |
+| Backend | `backend/.env` | Discloud dashboard |
+
+---
+
+## 📁 Project structure
 
 ```
-├── src/              # Frontend React
-├── backend/          # API WebSocket (Discloud)
-├── plugins/          # Plugins Vite (dev local)
-├── server/           # Servidor monolito (opcional)
-├── scripts/          # Utilitários (tunnel, zip Discloud)
-└── DEPLOY.md         # Guia de deploy
+├── src/              # React frontend
+├── backend/          # WebSocket API (Discloud)
+├── plugins/          # Vite plugins (local dev)
+├── server/           # Optional monolith server
+├── scripts/          # Tunnel + Discloud zip utilities
+└── DEPLOY.md         # Deploy guide
 ```
 
 ---
@@ -127,18 +129,18 @@ React 19 · TypeScript · Vite 8 · Tailwind CSS 4 · Zustand · WebSocket (ws) 
 
 ---
 
-## 🤝 Contribuir
+## 🤝 Contributing
 
-Issues e PRs são bem vindos. Fork, branch, commit e abra um pull request.
+Issues and pull requests are welcome. Fork, branch, commit, and open a PR.
 
 ---
 
-## 📄 Licença
+## 📄 License
 
 [MIT](./LICENSE) © 2026 Kodexa Labs
 
 ---
 
 <p align="center">
-  Feito com ☕ pela <strong>Kodexa</strong>
+  Made with ☕ by <strong><a href="https://kodexalabs.com.br">Kodexa</a></strong>
 </p>

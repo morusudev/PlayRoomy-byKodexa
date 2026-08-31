@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Modal } from '../components/ui/Modal'
+import { BrandBy } from '../components/landing/BrandBy'
+import { PlayRoomyLogo } from '../components/brand/PlayRoomyLogo'
 import { TeaserFrame } from '../components/landing/TeaserFrame'
 import { RoomManager } from '../services/room/roomManager'
 import { appConfig } from '../config'
@@ -61,49 +63,51 @@ export function HomePage() {
 
   return (
     <div className="home-page min-h-full flex flex-col">
-      <header className="relative z-10 px-5 sm:px-10 py-5 flex items-center justify-between max-w-6xl mx-auto w-full">
-        <div className="flex flex-col">
-          <span className="text-lg font-semibold tracking-tight">
-            Play<span className="text-accent">Roomy</span>
-          </span>
-          <span className="text-[10px] uppercase tracking-[0.18em] text-text-muted mt-0.5">
-            by {appConfig.brandBy}
-          </span>
+      <header className="relative z-10 px-5 sm:px-10 py-6 flex items-center justify-between max-w-6xl mx-auto w-full">
+        <div className="flex flex-col gap-1.5">
+          <PlayRoomyLogo size="hero" />
+          <BrandBy className="text-[10px] uppercase tracking-[0.22em] text-text-muted font-semibold" />
         </div>
         <button
           type="button"
           onClick={() => setShowJoin(true)}
-          className="text-sm text-text-secondary hover:text-text-primary transition-colors px-3 py-1.5 rounded-lg hover:bg-surface-2"
+          className="text-sm font-bold text-text-secondary hover:text-text-primary transition-colors px-4 py-2.5 rounded-xl border border-border-subtle hover:border-border hover:bg-surface-2/80"
         >
           Entrar
         </button>
       </header>
 
       <main className="relative z-10 flex-1 px-5 sm:px-10 pb-16">
-        <div className="max-w-6xl mx-auto w-full grid lg:grid-cols-2 gap-10 lg:gap-16 items-center min-h-[calc(100vh-11rem)]">
+        <div className="max-w-6xl mx-auto w-full grid lg:grid-cols-2 gap-10 lg:gap-16 items-center min-h-[calc(100vh-12rem)]">
           <div className="py-6 lg:py-10">
-            <p className="text-xs uppercase tracking-[0.2em] text-accent mb-4 font-medium">
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.18em] bg-accent/10 text-accent border border-accent/25 mb-6">
               Watch party
-            </p>
+            </span>
 
-            <h1 className="home-title text-[2.1rem] sm:text-[2.75rem] lg:text-5xl leading-[1.08] tracking-tight mb-5 max-w-lg">
-              YouTube junto, no mesmo segundo.
+            <h1 className="home-title text-[2.5rem] sm:text-[3.1rem] lg:text-[3.4rem] leading-[1.02] mb-6 max-w-xl">
+              YouTube com amigos.
+              <br />
+              <span className="text-accent">No mesmo segundo.</span>
             </h1>
 
-            <p className="text-text-secondary text-base sm:text-lg leading-relaxed max-w-md mb-8">
+            <p className="text-text-secondary text-base sm:text-lg leading-relaxed max-w-md mb-10">
               Crie uma sala, compartilhe o link e assista com quem quiser. Play, pause e playlist
               sincronizados. Sem app, sem cadastro.
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-3 mb-10">
-              <Button size="lg" onClick={() => setShowCreate(true)} className="sm:min-w-[168px]">
+            <div className="flex flex-col sm:flex-row gap-3 mb-12">
+              <Button
+                size="lg"
+                onClick={() => setShowCreate(true)}
+                className="sm:min-w-[180px] font-bold shadow-lg shadow-accent/20 hover:shadow-accent/30"
+              >
                 Criar sala
               </Button>
               <Button
                 size="lg"
                 variant="outline"
                 onClick={() => setShowJoin(true)}
-                className="sm:min-w-[168px]"
+                className="sm:min-w-[180px] font-bold"
               >
                 Tenho convite
               </Button>
@@ -113,12 +117,12 @@ export function HomePage() {
               {STEPS.map((step, i) => (
                 <div
                   key={step.title}
-                  className="rounded-xl border border-border-subtle bg-surface-1/70 px-3 py-3 sm:px-4 sm:py-4"
+                  className="rounded-xl border border-white/8 bg-surface-1/50 backdrop-blur-sm px-3 py-3.5 sm:px-4 sm:py-4"
                 >
-                  <span className="text-[10px] text-accent font-semibold tabular-nums">
+                  <span className="font-display text-xs text-accent font-extrabold tabular-nums">
                     0{i + 1}
                   </span>
-                  <p className="text-sm font-medium text-text-primary mt-1">{step.title}</p>
+                  <p className="text-sm font-bold text-text-primary mt-2">{step.title}</p>
                   <p className="text-[11px] sm:text-xs text-text-muted mt-1 leading-snug">
                     {step.desc}
                   </p>
@@ -133,10 +137,11 @@ export function HomePage() {
         </div>
       </main>
 
-      <footer className="relative z-10 px-5 sm:px-10 py-6 border-t border-border-subtle">
+      <footer className="relative z-10 px-5 sm:px-10 py-6 border-t border-white/6">
         <div className="max-w-6xl mx-auto w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs text-text-muted">
-          <span>
-            PlayRoomy <span className="text-text-muted/70">by {appConfig.brandBy}</span>
+          <span className="flex items-center gap-2">
+            <PlayRoomyLogo size="sm" className="shrink-0" />
+            <BrandBy className="font-semibold uppercase tracking-[0.16em]" />
           </span>
           {appConfig.githubUrl ? (
             <a

@@ -1,6 +1,7 @@
 export const appConfig = {
   name: 'PlayRoomy',
   brandBy: import.meta.env.VITE_BRAND_BY?.trim() || 'Kodexa',
+  brandUrl: import.meta.env.VITE_KODEXA_URL?.trim() || 'https://kodexalabs.com.br',
 
   /** Unique app namespace for peer discovery. Must match for everyone. */
   appId: import.meta.env.VITE_APP_ID?.trim() || 'playroomy-watch-party-v1',

@@ -2,7 +2,7 @@
 
 @theme {
   --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
-  --font-display: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+  --font-display: 'Syne', ui-sans-serif, system-ui, sans-serif;
   --color-surface-0: #09090b;
   --color-surface-1: #0f0f12;
   --color-surface-2: #16161a;
@@ -118,17 +118,25 @@
   }
 }
 
+.home-page {
+  background: linear-gradient(165deg, #030303 0%, #0a0a0c 38%, #1c1c22 72%, #111113 100%);
+}
+
 .home-page::before {
   content: '';
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(ellipse 55% 40% at 78% 18%, #3dd68c0a, transparent 65%);
+  background:
+    radial-gradient(ellipse 70% 50% at 15% 0%, #3dd68c10, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 90% 100%, #ffffff06, transparent 50%);
 }
 
 .home-title {
   font-family: var(--font-display);
-  font-weight: 400;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  text-transform: none;
 }
 
 .teaser-scanlines {

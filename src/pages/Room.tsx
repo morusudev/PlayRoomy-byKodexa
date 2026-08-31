@@ -6,6 +6,7 @@ import { useInviteUrl } from '../hooks/useInviteUrl'
 import { WatchTheater } from '../components/room/WatchTheater'
 import { ParticipantList } from '../components/room/ParticipantList'
 import { ConnectionBadge } from '../components/room/ConnectionBadge'
+import { PlayRoomyLogo } from '../components/brand/PlayRoomyLogo'
 import { Button } from '../components/ui/Button'
 import { Drawer } from '../components/ui/Drawer'
 import { Modal } from '../components/ui/Modal'
@@ -170,17 +171,18 @@ export function RoomPage() {
         </div>
       </Modal>
 
-      <header className="shrink-0 h-11 flex items-center justify-between gap-2 px-3 border-b border-border-subtle bg-surface-1/80 backdrop-blur-md">
-        <div className="flex items-center gap-2 min-w-0">
+      <header className="shrink-0 h-14 sm:h-[3.75rem] flex items-center justify-between gap-3 px-4 sm:px-5 border-b border-border-subtle bg-surface-1/90 backdrop-blur-md">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
           <button
             onClick={() => navigate('/')}
-            className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-3 transition-colors"
+            className="p-2 rounded-xl text-text-muted hover:text-text-primary hover:bg-surface-3 transition-colors shrink-0"
             title="Sair"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <span className="font-display font-bold tracking-tight text-sm">PlayRoomy</span>
-          <span className="hidden sm:inline font-mono text-[10px] text-text-muted truncate">
+          <PlayRoomyLogo size="sm" className="shrink-0" />
+          <span className="hidden sm:block w-px h-5 bg-border-subtle shrink-0" aria-hidden />
+          <span className="hidden sm:inline font-mono text-[11px] text-text-muted tracking-wider truncate">
             {roomId}
           </span>
         </div>
