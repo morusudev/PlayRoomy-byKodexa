@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <rect width="1200" height="630" fill="#09090b"/>
+  <rect width="1200" height="630" fill="url(#g)"/>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#030303"/>
+      <stop offset="0.45" stop-color="#0f0f12"/>
+      <stop offset="1" stop-color="#1c1c22"/>
+    </linearGradient>
+  </defs>
+  <circle cx="180" cy="120" r="220" fill="#3dd68c" fill-opacity="0.08"/>
+  <circle cx="1020" cy="560" r="260" fill="#ffffff" fill-opacity="0.03"/>
+  <text x="96" y="300" fill="#f4f4f5" font-family="system-ui, sans-serif" font-size="88" font-weight="800">Play<tspan fill="#3dd68c">Roomy</tspan></text>
+  <text x="96" y="390" fill="#a1a1aa" font-family="system-ui, sans-serif" font-size="40" font-weight="500">YouTube com amigos no mesmo segundo</text>
+  <text x="96" y="520" fill="#71717a" font-family="system-ui, sans-serif" font-size="28" font-weight="600" letter-spacing="6">BY KODEXA</text>
+</svg>

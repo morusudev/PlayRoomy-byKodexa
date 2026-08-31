@@ -61,7 +61,7 @@ export function PlaylistPanel({
         onClick={onClose}
         aria-label="Fechar playlist"
       />
-      <div className="absolute inset-y-0 left-0 z-40 w-full sm:max-w-sm flex flex-col bg-surface-1 border-r border-border shadow-2xl animate-[slide-in-left_0.2s_ease-out]">
+      <div className="absolute inset-y-0 left-0 z-40 w-full sm:max-w-sm flex flex-col bg-surface-1 border-r border-border shadow-2xl animate-scale-in">
       <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-border-subtle">
         <div className="flex items-center gap-2">
           <ListMusic className="w-4 h-4 text-accent" />
@@ -71,7 +71,7 @@ export function PlaylistPanel({
         <button
           type="button"
           onClick={onClose}
-          className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-3"
+          className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-3 transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
           aria-label="Fechar playlist"
         >
           <X className="w-4 h-4" />
@@ -87,7 +87,7 @@ export function PlaylistPanel({
               setError('')
             }}
             disabled={disabled}
-            placeholder="Colar link do YouTube…"
+            placeholder="Colar link do YouTube..."
             onKeyDown={(e) => {
               if (e.key === 'Enter') submit(false)
             }}
@@ -100,7 +100,7 @@ export function PlaylistPanel({
                 type="button"
                 disabled={disabled || !url.trim()}
                 onClick={() => submit(false)}
-                className="flex-1 h-9 rounded-lg bg-accent text-black text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-40"
+                className="flex-1 h-10 rounded-lg bg-accent text-black text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-40 transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.98] btn-shine"
               >
                 <Play className="w-3.5 h-3.5 fill-current" />
                 Tocar agora
@@ -111,7 +111,7 @@ export function PlaylistPanel({
                 type="button"
                 disabled={disabled || !url.trim()}
                 onClick={() => submit(true)}
-                className="flex-1 h-9 rounded-lg bg-surface-3 border border-border text-sm font-medium flex items-center justify-center gap-1.5 disabled:opacity-40"
+                className="flex-1 h-10 rounded-lg bg-surface-3 border border-border text-sm font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.98] hover:bg-surface-4"
               >
                 <Plus className="w-3.5 h-3.5" />
                 Na fila

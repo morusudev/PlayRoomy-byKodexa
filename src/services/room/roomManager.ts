@@ -184,7 +184,7 @@ export class RoomManager {
           this.callbacks.onToast('Sala pronta. Compartilhe o convite HTTPS!', 'success')
         } else {
           this.callbacks.onToast(
-            hadVideo ? 'Conectado. Sincronizando o vídeo…' : 'Conectado à sala!',
+            hadVideo ? 'Conectado. Sincronizando o video...' : 'Conectado à sala!',
             'success',
           )
         }
@@ -278,7 +278,7 @@ export class RoomManager {
             this.update({
               connectionStatus: 'connected',
               waitingForHost: true,
-              error: 'Aguardando o host abrir a sala…',
+              error: 'Aguardando o host abrir a sala...',
             })
             if (this.joinRetryTimer) clearTimeout(this.joinRetryTimer)
             this.joinRetryTimer = setTimeout(() => {

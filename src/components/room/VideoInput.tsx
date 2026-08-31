@@ -20,7 +20,7 @@ export function VideoInput({ onAdd, canChangeVideo, canAddToQueue, disabled }: V
       return
     }
     setError('')
-    onAdd(videoId, `Vídeo ${videoId.slice(0, 6)}…`, toQueue)
+    onAdd(videoId, `Vídeo ${videoId.slice(0, 6)}...`, toQueue)
     setUrl('')
   }
 

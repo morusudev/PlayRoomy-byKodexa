@@ -21,8 +21,11 @@ export function ConnectionBadge({ status }: ConnectionBadgeProps) {
   const { label, color, pulse } = config[status]
 
   return (
-    <div className="flex items-center gap-2 text-xs text-text-muted">
-      <span className="relative flex h-2 w-2">
+    <div
+      className="flex items-center gap-2 text-xs text-text-muted px-2 py-1 rounded-lg bg-surface-2/60"
+      title={label}
+    >
+      <span className="relative flex h-2 w-2 shrink-0">
         {pulse && (
           <span
             className={cn(
@@ -33,7 +36,7 @@ export function ConnectionBadge({ status }: ConnectionBadgeProps) {
         )}
         <span className={cn('relative inline-flex rounded-full h-2 w-2', color)} />
       </span>
-      {label}
+      <span className="hidden sm:inline">{label}</span>
     </div>
   )
 }

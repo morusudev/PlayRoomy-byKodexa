@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://playroomy.vercel.app/sitemap.xml

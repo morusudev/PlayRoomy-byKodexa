@@ -13,8 +13,8 @@ export function SecureContextBanner({ children }: { children: ReactNode }) {
   const httpsUrl = `https://${window.location.host}${window.location.pathname}${window.location.search}`
 
   return (
-    <div className="h-full flex items-center justify-center px-6 bg-surface-0">
-      <div className="max-w-md w-full rounded-2xl border border-border bg-surface-1 p-6 space-y-4">
+    <div className="h-full flex items-center justify-center px-6 bg-surface-0 animate-fade-in">
+      <div className="max-w-md w-full rounded-2xl border border-border bg-surface-1 p-6 space-y-4 animate-scale-in">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-warning/15 flex items-center justify-center">
             <ShieldAlert className="w-5 h-5 text-warning" />
@@ -34,7 +34,7 @@ export function SecureContextBanner({ children }: { children: ReactNode }) {
           <li>
             Abra <code className="text-accent break-all">{httpsUrl}</code>
           </li>
-          <li>Aceite o aviso do certificado (Avançado → Continuar)</li>
+          <li>Aceite o aviso do certificado (Avançado e depois Continuar)</li>
           <li>Compartilhe esse mesmo link <strong className="text-text-primary">https://</strong> com amigos</li>
         </ol>
 

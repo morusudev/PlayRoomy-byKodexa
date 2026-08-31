@@ -105,7 +105,7 @@ export function ChatOverlay({
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Mensagem…"
+            placeholder="Mensagem..."
             maxLength={500}
             className={cn(
               'flex-1 min-w-0 bg-transparent px-2 py-1.5 text-sm focus:outline-none',

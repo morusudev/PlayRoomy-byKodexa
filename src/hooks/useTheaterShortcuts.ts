@@ -1,13 +1,13 @@
 import { useEffect, useRef } from 'react'
 
 export const THEATER_SHORTCUTS = [
-  { keys: 'Espaço / K', label: 'Play ou pausar' },
-  { keys: 'J / ←', label: 'Voltar 15 segundos' },
-  { keys: 'L / →', label: 'Avançar 15 segundos' },
-  { keys: 'Shift + P', label: 'Vídeo anterior' },
-  { keys: 'Shift + N', label: 'Próximo vídeo' },
-  { keys: 'M', label: 'Mutar / ativar som' },
-  { keys: '↑ / ↓', label: 'Volume' },
+  { keys: 'Espaço ou K', label: 'Play ou pausar' },
+  { keys: 'J ou esquerda', label: 'Voltar 15 segundos' },
+  { keys: 'L ou direita', label: 'Avançar 15 segundos' },
+  { keys: 'Shift P', label: 'Vídeo anterior' },
+  { keys: 'Shift N', label: 'Próximo vídeo' },
+  { keys: 'M', label: 'Mutar ou ativar som' },
+  { keys: 'Cima ou baixo', label: 'Volume' },
   { keys: 'F', label: 'Tela cheia' },
   { keys: 'P', label: 'Playlist' },
   { keys: 'C', label: 'Chat no vídeo' },

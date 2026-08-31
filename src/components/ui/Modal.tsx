@@ -28,13 +28,13 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
         onClick={onClose}
       />
       <div
         className={cn(
           'relative w-full max-w-md rounded-xl bg-surface-1 border border-border shadow-2xl',
-          'animate-in zoom-in-95 fade-in duration-200',
+          'animate-scale-in',
           className,
         )}
       >

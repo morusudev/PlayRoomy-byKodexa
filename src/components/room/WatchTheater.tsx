@@ -184,7 +184,7 @@ export function WatchTheater({
   const handleSeekBack = useCallback(() => {
     if (!canDrive || !hasVideo) return
     seekBy(-SEEK_STEP_SEC)
-    showFeedback(`−${SEEK_STEP_SEC}s`, {
+    showFeedback(`menos ${SEEK_STEP_SEC}s`, {
       large: true,
       toast: `Voltou ${SEEK_STEP_SEC} segundos`,
     })
@@ -193,7 +193,7 @@ export function WatchTheater({
   const handleSeekForward = useCallback(() => {
     if (!canDrive || !hasVideo) return
     seekBy(SEEK_STEP_SEC)
-    showFeedback(`+${SEEK_STEP_SEC}s`, {
+    showFeedback(`mais ${SEEK_STEP_SEC}s`, {
       large: true,
       toast: `Avançou ${SEEK_STEP_SEC} segundos`,
     })
@@ -402,12 +402,12 @@ export function WatchTheater({
   }
 
   const overlayBtn =
-    'h-8 w-8 sm:h-9 sm:w-9 rounded-lg flex items-center justify-center text-white/90 hover:text-white hover:bg-white/15 active:bg-white/20 transition-colors shrink-0 touch-manipulation'
+    'h-8 w-8 sm:h-9 sm:w-9 rounded-lg flex items-center justify-center text-white/90 hover:text-white hover:bg-white/15 active:bg-white/20 active:scale-95 hover:-translate-y-0.5 transition-all duration-200 shrink-0 touch-manipulation'
 
   const playBtnClass = cn(
-    'rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 font-bold shadow-md transition-transform active:scale-95 touch-manipulation',
+    'rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 font-bold shadow-md transition-all duration-200 active:scale-95 hover:-translate-y-0.5 touch-manipulation',
     'h-9 w-9 sm:h-11 sm:w-11',
-    hasVideo ? 'bg-accent text-black hover:bg-accent-hover' : 'bg-white/10 text-white/40 cursor-not-allowed',
+    hasVideo ? 'bg-accent text-black hover:bg-accent-hover hover:shadow-accent/30' : 'bg-white/10 text-white/40 cursor-not-allowed',
   )
 
   const transportControls = canDrive ? (
@@ -421,7 +421,7 @@ export function WatchTheater({
       >
         <SkipBack className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
       </button>
-      <button type="button" onClick={handleSeekBack} className={overlayBtn} title={`-${SEEK_STEP_SEC}s`}>
+      <button type="button" onClick={handleSeekBack} className={overlayBtn} title={`Voltar ${SEEK_STEP_SEC} segundos`}>
         <Rewind className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
       </button>
       <button
@@ -438,7 +438,7 @@ export function WatchTheater({
           <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
         )}
       </button>
-      <button type="button" onClick={handleSeekForward} className={overlayBtn} title={`+${SEEK_STEP_SEC}s`}>
+      <button type="button" onClick={handleSeekForward} className={overlayBtn} title={`Avançar ${SEEK_STEP_SEC} segundos`}>
         <FastForward className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
       </button>
       <button
@@ -497,7 +497,7 @@ export function WatchTheater({
             )}
           >
             {qualities.length === 0 ? (
-              <p className="px-3 py-2 text-[11px] text-white/60">Carregando…</p>
+              <p className="px-3 py-2 text-[11px] text-white/60">Carregando...</p>
             ) : (
               qualities.map((level) => (
                 <button
@@ -622,16 +622,23 @@ export function WatchTheater({
           }
         >
           {!hasVideo && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2">
-              <Radio className="w-10 h-10 text-white/25" />
-              <p className="text-sm text-white/50">Aguardando um vídeo</p>
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 px-6 animate-fade-in">
+              <div className="relative">
+                <span className="absolute inset-0 rounded-full bg-accent/20 animate-play-ring" />
+                <Radio className="relative w-10 h-10 text-white/30 animate-float" />
+              </div>
+              <p className="text-sm sm:text-base text-white/55 text-center">Aguardando um vídeo</p>
               {canDrive && connected && (
                 <button
                   type="button"
                   onClick={() => setShowPlaylist(true)}
-                  className="text-xs text-accent hover:underline"
+                  className="interactive-card mt-1 inline-flex items-center gap-3 sm:gap-4 px-5 sm:px-7 py-3.5 sm:py-4 rounded-2xl bg-accent/12 border border-accent/35 text-accent font-bold text-base sm:text-lg hover:bg-accent hover:text-black animate-fade-up animate-delay-2 group"
+                  aria-label="Abrir playlist"
                 >
-                  Abrir playlist
+                  <span className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-xl bg-accent/20 group-hover:bg-black/10 transition-colors">
+                    <ListMusic className="w-6 h-6 sm:w-7 sm:h-7" />
+                  </span>
+                  <span>Abrir playlist</span>
                 </button>
               )}
             </div>
@@ -778,7 +785,8 @@ export function WatchTheater({
                     <li>Toque na tela para mostrar ou esconder os controles.</li>
                     <li>
                       Toque duas vezes na <strong className="text-text-primary">esquerda</strong> ou{' '}
-                      <strong className="text-text-primary">direita</strong> do vídeo para ±{SEEK_STEP_SEC}s.
+                      <strong className="text-text-primary">direita</strong> do vídeo para mais ou menos{' '}
+                      {SEEK_STEP_SEC} segundos.
                     </li>
                     <li>Botões maiores e barra de progresso mais grossa para o dedo.</li>
                     <li>Chat fixo embaixo do vídeo. Use o ícone de mensagem.</li>
@@ -789,7 +797,11 @@ export function WatchTheater({
           )}
 
           <div className={cn('absolute top-1.5 left-1.5 sm:top-2 sm:left-2 z-20 flex items-center gap-1 sm:gap-2 pointer-events-none', chromeClass)}>
-            <span className="hidden sm:inline px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold uppercase">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold uppercase">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-70" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white animate-live-dot" />
+              </span>
               Live
             </span>
             {peerCount > 0 && (

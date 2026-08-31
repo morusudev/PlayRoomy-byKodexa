@@ -102,7 +102,7 @@ export function RoomPage() {
   const statusBanner = room.error
     ? { text: room.error, tone: 'danger' as const }
     : room.connectionStatus === 'connecting'
-      ? { text: 'Conectando ao host…', tone: 'warning' as const }
+      ? { text: 'Conectando ao host...', tone: 'warning' as const }
       : room.waitingForHost && !room.roomState
         ? { text: 'Aguardando o host abrir a sala', tone: 'accent' as const }
         : room.peerCount > 0
@@ -171,63 +171,68 @@ export function RoomPage() {
         </div>
       </Modal>
 
-      <header className="shrink-0 h-14 sm:h-[3.75rem] flex items-center justify-between gap-3 px-4 sm:px-5 border-b border-border-subtle bg-surface-1/90 backdrop-blur-md">
-        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-          <button
-            onClick={() => navigate('/')}
-            className="p-2 rounded-xl text-text-muted hover:text-text-primary hover:bg-surface-3 transition-colors shrink-0"
-            title="Sair"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <PlayRoomyLogo size="sm" className="shrink-0" />
-          <span className="hidden sm:block w-px h-5 bg-border-subtle shrink-0" aria-hidden />
-          <span className="hidden sm:inline font-mono text-[11px] text-text-muted tracking-wider truncate">
-            {roomId}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          {statusBanner && (
-            <span
-              className={`hidden md:inline text-[11px] font-medium px-2 py-0.5 rounded-md ${
-                statusBanner.tone === 'success'
-                  ? 'text-success bg-success/10'
-                  : statusBanner.tone === 'danger'
-                    ? 'text-danger bg-danger/10'
-                    : statusBanner.tone === 'warning'
-                      ? 'text-warning bg-warning/10'
-                      : statusBanner.tone === 'accent'
-                        ? 'text-accent bg-accent/10'
-                        : 'text-text-muted bg-surface-2'
-              }`}
+      <header className="shrink-0 border-b border-border-subtle bg-surface-1/90 backdrop-blur-md animate-fade-up">
+        <div className="room-shell flex items-center justify-between gap-2 sm:gap-3 h-14 sm:h-[3.75rem]">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <button
+              onClick={() => navigate('/')}
+              className="p-2 rounded-xl text-text-muted hover:text-text-primary hover:bg-surface-3 transition-all duration-200 hover:-translate-y-0.5 active:scale-95 shrink-0"
+              title="Sair"
             >
-              {statusBanner.text}
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <PlayRoomyLogo size="sm" className="shrink-0" />
+            <span className="sm:hidden font-mono text-[10px] text-text-muted tracking-wide truncate max-w-[4.5rem]">
+              {roomId}
             </span>
-          )}
-          <ConnectionBadge status={room.connectionStatus} />
-          <Button variant="outline" size="sm" onClick={handleCopyInvite} className="gap-1 h-8">
-            {copied ? <Check className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
-            <span className="hidden sm:inline text-xs">{copied ? 'Copiado' : 'Convidar'}</span>
-          </Button>
-          <button
-            onClick={() => setShowPeopleDrawer(true)}
-            className="relative p-1.5 rounded-lg text-text-secondary hover:bg-surface-3"
-            title="Participantes"
-          >
-            <Users className="w-4 h-4" />
-            {participantCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-0.5 rounded-full bg-accent text-[9px] font-bold text-black flex items-center justify-center">
-                {participantCount}
+            <span className="hidden sm:block w-px h-5 bg-border-subtle shrink-0" aria-hidden />
+            <span className="hidden sm:inline font-mono text-[11px] text-text-muted tracking-wider truncate">
+              {roomId}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            {statusBanner && (
+              <span
+                className={`hidden md:inline text-[11px] font-medium px-2.5 py-1 rounded-lg transition-colors animate-fade-in ${
+                  statusBanner.tone === 'success'
+                    ? 'text-success bg-success/10'
+                    : statusBanner.tone === 'danger'
+                      ? 'text-danger bg-danger/10'
+                      : statusBanner.tone === 'warning'
+                        ? 'text-warning bg-warning/10'
+                        : statusBanner.tone === 'accent'
+                          ? 'text-accent bg-accent/10'
+                          : 'text-text-muted bg-surface-2'
+                }`}
+              >
+                {statusBanner.text}
               </span>
             )}
-          </button>
+            <ConnectionBadge status={room.connectionStatus} />
+            <Button variant="outline" size="sm" onClick={handleCopyInvite} className="gap-1 h-8">
+              {copied ? <Check className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline text-xs">{copied ? 'Copiado' : 'Convidar'}</span>
+            </Button>
+            <button
+              onClick={() => setShowPeopleDrawer(true)}
+              className="relative p-2 rounded-xl text-text-secondary hover:bg-surface-3 transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
+              title="Participantes"
+            >
+              <Users className="w-4 h-4" />
+              {participantCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-0.5 rounded-full bg-accent text-[9px] font-bold text-black flex items-center justify-center animate-scale-in">
+                  {participantCount}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </header>
 
       {tunnelStatus === 'starting' && (
         <div className="shrink-0 px-3 py-2 bg-accent/10 border-b border-accent/20 text-xs text-center text-text-secondary">
-          Gerando link publico… aguarde alguns segundos.
+          Gerando link publico... aguarde alguns segundos.
         </div>
       )}
 
@@ -235,7 +240,7 @@ export function RoomPage() {
         <div className="shrink-0 px-3 py-2 bg-warning/10 border-b border-warning/20 text-xs flex flex-col sm:flex-row sm:items-center sm:justify-center gap-1.5 text-center sm:text-left">
           <span className="text-text-secondary flex items-center justify-center sm:justify-start gap-1.5">
             <Wifi className="w-3.5 h-3.5 shrink-0 text-warning" />
-            Este link so funciona na mesma Wi‑Fi.
+            Este link so funciona na mesma rede.
           </span>
           <span className="text-text-muted">
             Para amigos de longe: pare o servidor e rode{' '}
@@ -260,7 +265,7 @@ export function RoomPage() {
         </div>
       )}
 
-      <div className="flex-1 min-h-0 w-full p-1 sm:p-3">
+      <div className="flex-1 min-h-0 room-shell pb-2 sm:pb-3 pt-2 sm:pt-3 flex flex-col animate-fade-up animate-delay-1">
         <WatchTheater
           playerState={roomState?.player ?? null}
           isAuthority={room.canControl}
@@ -314,7 +319,7 @@ export function RoomPage() {
             onReclaimControl={room.reclaimControl}
           />
         ) : (
-          <p className="text-sm text-text-muted text-center py-8">Conectando…</p>
+          <p className="text-sm text-text-muted text-center py-8">Conectando...</p>
         )}
       </Drawer>
     </div>

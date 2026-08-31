@@ -12,12 +12,15 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variants: Record<Variant, string> = {
   primary:
-    'bg-accent text-black hover:bg-accent-hover shadow-sm shadow-accent/20',
-  secondary: 'bg-surface-3 text-text-primary hover:bg-surface-4',
-  ghost: 'text-text-secondary hover:text-text-primary hover:bg-surface-3',
-  danger: 'bg-danger/10 text-danger hover:bg-danger/20',
+    'btn-shine bg-accent text-black hover:bg-accent-hover shadow-sm shadow-accent/25 hover:shadow-accent/35 hover:-translate-y-0.5',
+  secondary:
+    'bg-surface-3 text-text-primary hover:bg-surface-4 hover:-translate-y-0.5 hover:shadow-md hover:shadow-black/20',
+  ghost:
+    'text-text-secondary hover:text-text-primary hover:bg-surface-3 hover:-translate-y-0.5',
+  danger:
+    'bg-danger/10 text-danger hover:bg-danger/20 hover:-translate-y-0.5',
   outline:
-    'border border-border bg-transparent text-text-primary hover:bg-surface-2',
+    'border border-border bg-transparent text-text-primary hover:bg-surface-2 hover:border-border hover:-translate-y-0.5 hover:shadow-md hover:shadow-black/15',
 }
 
 const sizes: Record<Size, string> = {
@@ -42,10 +45,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     <button
       ref={ref}
       className={cn(
-        'inline-flex items-center justify-center rounded-lg font-medium transition-all duration-200',
+        'inline-flex items-center justify-center rounded-lg font-medium',
+        'transition-all duration-200 ease-out',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50',
-        'disabled:opacity-50 disabled:pointer-events-none',
-        'active:scale-[0.98]',
+        'disabled:opacity-50 disabled:pointer-events-none disabled:transform-none disabled:shadow-none',
+        'active:translate-y-0 active:scale-[0.97]',
         variants[variant],
         sizes[size],
         className,

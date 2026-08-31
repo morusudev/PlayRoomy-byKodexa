@@ -63,43 +63,45 @@ export function HomePage() {
 
   return (
     <div className="home-page min-h-full flex flex-col">
-      <header className="relative z-10 px-5 sm:px-10 py-6 flex items-center justify-between max-w-6xl mx-auto w-full">
-        <div className="flex flex-col gap-1.5">
-          <PlayRoomyLogo size="hero" />
-          <BrandBy className="text-[10px] uppercase tracking-[0.22em] text-text-muted font-semibold" />
+      <header className="relative z-10 py-5 sm:py-6 animate-fade-up">
+        <div className="max-w-6xl mx-auto w-full px-5 sm:px-10 flex items-center justify-between gap-4">
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <PlayRoomyLogo size="hero" />
+            <BrandBy className="text-[10px] uppercase tracking-[0.22em] text-text-muted font-semibold" />
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowJoin(true)}
+            className="interactive-card text-sm font-bold text-text-secondary hover:text-text-primary px-4 py-2.5 rounded-xl border border-border-subtle hover:border-border bg-surface-1/40 hover:bg-surface-2/80 shrink-0"
+          >
+            Entrar
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowJoin(true)}
-          className="text-sm font-bold text-text-secondary hover:text-text-primary transition-colors px-4 py-2.5 rounded-xl border border-border-subtle hover:border-border hover:bg-surface-2/80"
-        >
-          Entrar
-        </button>
       </header>
 
-      <main className="relative z-10 flex-1 px-5 sm:px-10 pb-16">
-        <div className="max-w-6xl mx-auto w-full grid lg:grid-cols-2 gap-10 lg:gap-16 items-center min-h-[calc(100vh-12rem)]">
-          <div className="py-6 lg:py-10">
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.18em] bg-accent/10 text-accent border border-accent/25 mb-6">
+      <main className="relative z-10 flex-1 px-5 sm:px-10 pb-12 sm:pb-16" id="conteudo-principal">
+        <div className="max-w-6xl mx-auto w-full grid lg:grid-cols-2 gap-8 lg:gap-16 items-center min-h-[calc(100vh-11rem)]">
+          <div className="py-4 sm:py-6 lg:py-10">
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.18em] bg-accent/10 text-accent border border-accent/25 mb-5 sm:mb-6 animate-fade-up animate-delay-1">
               Watch party
             </span>
 
-            <h1 className="home-title text-[2.5rem] sm:text-[3.1rem] lg:text-[3.4rem] leading-[1.02] mb-6 max-w-xl">
+            <h1 className="home-title text-[2.15rem] min-[400px]:text-[2.5rem] sm:text-[3.1rem] lg:text-[3.4rem] leading-[1.04] mb-5 sm:mb-6 max-w-xl animate-fade-up animate-delay-2">
               YouTube com amigos.
               <br />
               <span className="text-accent">No mesmo segundo.</span>
             </h1>
 
-            <p className="text-text-secondary text-base sm:text-lg leading-relaxed max-w-md mb-10">
+            <p className="text-text-secondary text-[15px] sm:text-lg leading-relaxed max-w-md mb-8 sm:mb-10 animate-fade-up animate-delay-3">
               Crie uma sala, compartilhe o link e assista com quem quiser. Play, pause e playlist
               sincronizados. Sem app, sem cadastro.
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-3 mb-12">
+            <div className="flex flex-col sm:flex-row gap-3 mb-10 sm:mb-12 animate-fade-up animate-delay-4">
               <Button
                 size="lg"
                 onClick={() => setShowCreate(true)}
-                className="sm:min-w-[180px] font-bold shadow-lg shadow-accent/20 hover:shadow-accent/30"
+                className="w-full sm:w-auto sm:min-w-[180px] font-bold"
               >
                 Criar sala
               </Button>
@@ -107,31 +109,30 @@ export function HomePage() {
                 size="lg"
                 variant="outline"
                 onClick={() => setShowJoin(true)}
-                className="sm:min-w-[180px] font-bold"
+                className="w-full sm:w-auto sm:min-w-[180px] font-bold"
               >
                 Tenho convite
               </Button>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 sm:gap-4 max-w-lg">
+            <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-3 sm:gap-4 max-w-lg animate-fade-up animate-delay-5">
               {STEPS.map((step, i) => (
                 <div
                   key={step.title}
-                  className="rounded-xl border border-white/8 bg-surface-1/50 backdrop-blur-sm px-3 py-3.5 sm:px-4 sm:py-4"
+                  className="interactive-card rounded-xl border border-white/8 bg-surface-1/50 backdrop-blur-sm px-4 py-4"
+                  style={{ animationDelay: `${0.55 + i * 0.08}s` }}
                 >
                   <span className="font-display text-xs text-accent font-extrabold tabular-nums">
                     0{i + 1}
                   </span>
                   <p className="text-sm font-bold text-text-primary mt-2">{step.title}</p>
-                  <p className="text-[11px] sm:text-xs text-text-muted mt-1 leading-snug">
-                    {step.desc}
-                  </p>
+                  <p className="text-xs text-text-muted mt-1 leading-snug">{step.desc}</p>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="flex justify-center lg:justify-end py-6 lg:py-10">
+          <div className="flex justify-center lg:justify-end py-4 sm:py-6 lg:py-10">
             <TeaserFrame />
           </div>
         </div>
