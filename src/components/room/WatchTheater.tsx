@@ -234,12 +234,8 @@ export function WatchTheater({
   }, [canDrive, hasVideo, seekBy, showFeedback])
 
   const handlePlayPause = useCallback(() => {
-    if (!hasVideo) return
+    if (!hasVideo || !canDrive) return
     revealControls()
-    if (!canDrive) {
-      activatePlayback()
-      return
-    }
     if (isPlaying) {
       pause()
       showFeedback('Pausado', { toast: 'Vídeo pausado' })
@@ -247,7 +243,7 @@ export function WatchTheater({
       play()
       showFeedback('Play', { toast: 'Reproduzindo' })
     }
-  }, [canDrive, hasVideo, isPlaying, pause, play, showFeedback, activatePlayback, revealControls])
+  }, [canDrive, hasVideo, isPlaying, pause, play, showFeedback, revealControls])
 
   const handleMuteToggle = useCallback(() => {
     const willMute = !(muted || volume === 0)
@@ -478,75 +474,63 @@ export function WatchTheater({
     hasVideo ? 'bg-accent text-black' : 'bg-white/10 text-white/40 cursor-not-allowed',
   )
 
-  const playPauseButton = (
-    <button
-      type="button"
-      onClick={handlePlayPause}
-      disabled={!hasVideo}
-      className={playBtnClass}
-      title={isPlaying ? 'Pausar' : 'Play'}
-      aria-label={isPlaying ? 'Pausar' : 'Play'}
-    >
-      {isPlaying ? (
-        <Pause className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={2.5} />
-      ) : (
-        <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
-      )}
-    </button>
-  )
-
-  const transportControlsInner = (
+  const transportControlsInner = canDrive ? (
     <>
-      {canDrive ? (
+      <button
+        type="button"
+        onClick={handlePrevVideo}
+        disabled={!canGoPrevious}
+        className={cn(overlayBtn, !canGoPrevious && 'opacity-40 cursor-not-allowed')}
+        title="Vídeo anterior"
+      >
+        <SkipBack className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+      </button>
+      <button type="button" onClick={handleSeekBack} className={overlayBtn} title={`Voltar ${SEEK_STEP_SEC} segundos`}>
+        <Rewind className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+      </button>
+      <button
+        type="button"
+        onClick={handlePlayPause}
+        disabled={!hasVideo}
+        className={playBtnClass}
+        title={isPlaying ? 'Pausar' : 'Play'}
+        aria-label={isPlaying ? 'Pausar' : 'Play'}
+      >
+        {isPlaying ? (
+          <Pause className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={2.5} />
+        ) : (
+          <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
+        )}
+      </button>
+      <button type="button" onClick={handleSeekForward} className={overlayBtn} title={`Avançar ${SEEK_STEP_SEC} segundos`}>
+        <FastForward className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+      </button>
+      <button
+        type="button"
+        onClick={handleNextVideo}
+        disabled={!canGoNext}
+        className={cn(overlayBtn, !canGoNext && 'opacity-40 cursor-not-allowed')}
+        title="Próximo vídeo"
+      >
+        <SkipForward className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+      </button>
+      {canChangeVideo && (
         <>
+          <div className="theater-dock-divider mx-0.5" aria-hidden />
           <button
             type="button"
-            onClick={handlePrevVideo}
-            disabled={!canGoPrevious}
-            className={cn(overlayBtn, !canGoPrevious && 'opacity-40 cursor-not-allowed')}
-            title="Vídeo anterior"
+            onClick={handleStopVideo}
+            className={cn(overlayBtn, 'hover:text-red-300 hover:bg-red-500/20')}
+            title="Retirar vídeo"
+            aria-label="Retirar vídeo"
           >
-            <SkipBack className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          </button>
-          <button type="button" onClick={handleSeekBack} className={overlayBtn} title={`Voltar ${SEEK_STEP_SEC} segundos`}>
-            <Rewind className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <VideoOff className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
         </>
-      ) : null}
-      {playPauseButton}
-      {canDrive ? (
-        <>
-          <button type="button" onClick={handleSeekForward} className={overlayBtn} title={`Avançar ${SEEK_STEP_SEC} segundos`}>
-            <FastForward className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={handleNextVideo}
-            disabled={!canGoNext}
-            className={cn(overlayBtn, !canGoNext && 'opacity-40 cursor-not-allowed')}
-            title="Próximo vídeo"
-          >
-            <SkipForward className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          </button>
-          {canChangeVideo && (
-            <>
-              <div className="theater-dock-divider mx-0.5" aria-hidden />
-              <button
-                type="button"
-                onClick={handleStopVideo}
-                className={cn(overlayBtn, 'hover:text-red-300 hover:bg-red-500/20')}
-                title="Retirar vídeo"
-                aria-label="Retirar vídeo"
-              >
-                <VideoOff className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              </button>
-            </>
-          )}
-        </>
-      ) : (
-        <span className="text-[10px] sm:text-[11px] text-white/60 px-1 shrink-0">Assistindo</span>
       )}
     </>
+  ) : (
+    <span className="text-[10px] sm:text-[11px] text-white/60 px-1 shrink-0">Assistindo</span>
   )
 
   const transportControls = (
@@ -748,16 +732,15 @@ export function WatchTheater({
       onClick={(e) => e.stopPropagation()}
     >
       {mobileProgressBar}
-      {hasVideo ? (
+      {canDrive ? (
         <div className="flex items-center justify-center gap-3 mb-2.5">
-          {canDrive ? (
-            <button type="button" onClick={handleSeekBack} className={overlayBtn} aria-label={`Voltar ${SEEK_STEP_SEC}s`}>
-              <Rewind className="w-5 h-5" />
-            </button>
-          ) : null}
+          <button type="button" onClick={handleSeekBack} className={overlayBtn} aria-label={`Voltar ${SEEK_STEP_SEC}s`}>
+            <Rewind className="w-5 h-5" />
+          </button>
           <button
             type="button"
             onClick={handlePlayPause}
+            disabled={!hasVideo}
             className={mobilePlayBtnClass}
             aria-label={isPlaying ? 'Pausar' : 'Play'}
           >
@@ -767,15 +750,13 @@ export function WatchTheater({
               <Play className="w-6 h-6 fill-current ml-0.5" />
             )}
           </button>
-          {canDrive ? (
-            <button type="button" onClick={handleSeekForward} className={overlayBtn} aria-label={`Avançar ${SEEK_STEP_SEC}s`}>
-              <FastForward className="w-5 h-5" />
-            </button>
-          ) : (
-            <span className="text-xs text-white/60">Assistindo</span>
-          )}
+          <button type="button" onClick={handleSeekForward} className={overlayBtn} aria-label={`Avançar ${SEEK_STEP_SEC}s`}>
+            <FastForward className="w-5 h-5" />
+          </button>
         </div>
-      ) : null}
+      ) : (
+        <p className="text-center text-xs text-white/60 mb-2.5">Sincronizado com a sala</p>
+      )}
       <div className="flex items-center justify-between gap-1">
         <button type="button" onClick={handleMuteToggle} className={overlayBtn} aria-label="Volume">
           {muted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
@@ -893,7 +874,7 @@ export function WatchTheater({
           {!isCoarse ? <PlayerActionFlash message={flashMessage} large={flashLarge} /> : null}
           {!isCoarse ? <ReactionBurst reactions={liveReactions} /> : null}
 
-          {hasVideo && !isCoarse && (
+          {canDrive && hasVideo && !isCoarse && (
             <div
               className={cn(
                 'absolute inset-0 z-[15] flex items-center justify-center pointer-events-none',
@@ -912,7 +893,7 @@ export function WatchTheater({
                   centerPlayVisible ? 'scale-100 pointer-events-auto' : 'scale-90 pointer-events-none',
                 )}
                 aria-label={isPlaying ? 'Pausar' : 'Play'}
-                title={canDrive ? (isPlaying ? 'Pausar' : 'Play') : 'Sincronizar reprodução'}
+                title={isPlaying ? 'Pausar' : 'Play'}
               >
                 {isPlaying ? (
                   <Pause className="w-7 h-7 sm:w-8 sm:h-8" strokeWidth={2.5} />
