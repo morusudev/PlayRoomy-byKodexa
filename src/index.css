@@ -199,7 +199,7 @@
   height: 100% !important;
 }
 
-/* Cobre o watermark do YouTube no canto (mobile) sem bloquear o vídeo */
+/* Cobre watermark e faixa de legendas automáticas no mobile */
 @media (pointer: coarse) {
   .theater-yt-stage::after {
     content: '';
@@ -211,6 +211,18 @@
     background: linear-gradient(to top left, rgb(0 0 0 / 0.92) 40%, transparent);
     pointer-events: none;
     z-index: 4;
+  }
+
+  .theater-yt-stage::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 4.5rem;
+    background: linear-gradient(to top, rgb(0 0 0 / 0.78) 0%, transparent 100%);
+    pointer-events: none;
+    z-index: 3;
   }
 }
 

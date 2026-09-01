@@ -189,6 +189,10 @@ export function useYouTubePlayer({
       host: isLanIp ? undefined : 'https://www.youtube-nocookie.com',
       playerVars,
       events: {
+        onReady: () => {
+          const player = playerRef.current
+          if (player) disableYouTubeCaptions(player)
+        },
         onStateChange: (event) => {
           const player = playerRef.current
           if (player) disableYouTubeCaptions(player)
@@ -331,7 +335,9 @@ export function useYouTubePlayer({
       ? Math.max(0, getExpectedTime(state))
       : Math.max(0, state.currentTime)
 
-    if (state.playing) {
+    if (isCoarse) {
+      player.cueVideoById(videoId, startAt)
+    } else if (state.playing) {
       player.mute()
       player.loadVideoById(videoId, startAt)
     } else {
@@ -370,11 +376,14 @@ export function useYouTubePlayer({
 
     if (playingChanged) {
       applyRemotePlayback(player, state, audioRef.current, syncMode, true)
+      disableYouTubeCaptions(player)
       checkGestureNeeded()
       return
     }
 
-    applyRemoteSeekOnly(player, state, syncMode)
+    if (!isCoarse) {
+      applyRemoteSeekOnly(player, state, syncMode)
+    }
   }, [
     isSyncDriver,
     isReady,
@@ -399,17 +408,14 @@ export function useYouTubePlayer({
   }, [isSyncDriver, isReady, isCoarse])
 
   useEffect(() => {
-    if (!isSyncDriver || isCoarse) return
+    if (!isReady) return
     const id = window.setInterval(() => {
       const player = playerRef.current
-      const state = stateRef.current
-      if (!player || !state?.videoId || !state.playing) return
-      if (Date.now() < ignoreLocalUntil.current) return
-      if (player.getPlayerState() !== YT.PlayerState.PLAYING) return
-      callbacksRef.current.onSeek(player.getCurrentTime())
-    }, 12000)
+      if (!player || !loadedVideoId.current) return
+      disableYouTubeCaptions(player)
+    }, isCoarse ? 1200 : 2500)
     return () => window.clearInterval(id)
-  }, [isSyncDriver, isReady, isCoarse])
+  }, [isReady, isCoarse])
 
   const handleSeek = useCallback((time: number) => {
     if (!canSendRef.current) return

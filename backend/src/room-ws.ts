@@ -554,10 +554,14 @@ export function attachRoomyWss(httpServer: RoomyHttpServer, options: AttachRoomy
         break
       case 'SEEK':
         if (!canControl(actor, room)) return
-        player = {
-          ...player,
-          currentTime: msg.currentTime ?? player.currentTime,
-          updatedAt: now,
+        {
+          const nextTime = msg.currentTime ?? player.currentTime
+          const jumped = Math.abs(nextTime - player.currentTime) > 2.5
+          player = {
+            ...player,
+            currentTime: nextTime,
+            updatedAt: jumped ? now : player.updatedAt,
+          }
         }
         break
       case 'VIDEO_CHANGE': {

@@ -40,6 +40,7 @@ export interface YtPlayer {
   getIframe(): HTMLIFrameElement
   unloadModule?(moduleName: string): void
   loadModule?(moduleName: string): void
+  setOption?(module: string, option: string, value: unknown): void
 }
 
 export interface YtPlayerEvent {
@@ -139,11 +140,13 @@ export const YT = {
   PlayerState: YT_PLAYER_STATE,
 }
 
-/** YouTube só permite forçar legendas ON via API; para esconder usamos unloadModule. */
+/** YouTube só permite forçar legendas ON via API; para esconder usamos unloadModule + setOption. */
 export function disableYouTubeCaptions(player: YtPlayer): void {
   try {
     player.unloadModule?.('captions')
     player.unloadModule?.('cc')
+    player.setOption?.('captions', 'track', {})
+    player.setOption?.('cc', 'track', {})
   } catch {
     // ignore — módulo pode não existir em alguns players
   }
