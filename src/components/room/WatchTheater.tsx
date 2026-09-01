@@ -868,7 +868,12 @@ export function WatchTheater({
           {!isCoarse ? <ReactionBurst reactions={liveReactions} /> : null}
 
           {canDrive && hasVideo && !isCoarse && (
-            <div className="absolute inset-0 z-[15] flex items-center justify-center pointer-events-none">
+            <div
+              className={cn(
+                'absolute inset-0 z-[15] flex items-center justify-center pointer-events-none',
+                chromeClass,
+              )}
+            >
               <button
                 type="button"
                 onClick={(e) => {
@@ -876,11 +881,9 @@ export function WatchTheater({
                   handlePlayPause()
                 }}
                 className={cn(
-                  'h-14 w-14 sm:h-[4.25rem] sm:w-[4.25rem] rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 touch-manipulation pointer-events-auto',
+                  'h-14 w-14 sm:h-[4.25rem] sm:w-[4.25rem] rounded-full flex items-center justify-center shadow-2xl transition-transform duration-300 touch-manipulation',
                   'bg-black/60 backdrop-blur-md border border-white/25 text-white active:scale-95',
-                  'opacity-0 scale-90 pointer-events-none',
-                  'group-hover/video:opacity-100 group-hover/video:scale-100 group-hover/video:pointer-events-auto',
-                  controlsVisible && 'opacity-100 scale-100 pointer-events-auto',
+                  controlsVisible ? 'scale-100 pointer-events-auto' : 'scale-90 pointer-events-none',
                 )}
                 aria-label={isPlaying ? 'Pausar' : 'Play'}
                 title={isPlaying ? 'Pausar' : 'Play'}
@@ -898,18 +901,14 @@ export function WatchTheater({
             <div
               className={cn(
                 'absolute inset-x-0 bottom-0 z-[50]',
-                isCoarse ? 'pointer-events-auto' : cn('pointer-events-none', chromeClass),
+                chromeClass,
+                controlsVisible ? 'pointer-events-auto' : 'pointer-events-none',
               )}
             >
               {isCoarse ? (
                 mobileControls
               ) : (
-              <div
-                className={cn(
-                  'bg-gradient-to-t from-black/95 via-black/75 to-transparent pt-3 sm:pt-10 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:pb-3.5 px-2 sm:px-4',
-                  controlsVisible ? 'pointer-events-auto' : 'pointer-events-none',
-                )}
-              >
+              <div className="bg-gradient-to-t from-black/95 via-black/75 to-transparent pt-3 sm:pt-10 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:pb-3.5 px-2 sm:px-4">
                 {duration > 0 && (
                   <div className="mb-1 sm:mb-2.5">
                     <div className={cn('relative rounded-full bg-white/20', isCoarse ? 'h-3' : 'h-1 sm:h-2')}>
