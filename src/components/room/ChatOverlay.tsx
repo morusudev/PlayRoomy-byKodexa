@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Send, X, Pin, PinOff } from 'lucide-react'
 import type { ChatMessage, ReactionKind } from '../../types'
 import { ReactionBar } from './ReactionBar'
@@ -18,6 +18,14 @@ interface ChatOverlayProps {
   onToggleFullscreenChatPref?: () => void
 }
 
+function resetIosViewportZoom() {
+  window.setTimeout(() => {
+    window.scrollTo(0, 0)
+    document.body.scrollTop = 0
+    document.documentElement.scrollTop = 0
+  }, 100)
+}
+
 export function ChatOverlay({
   messages,
   onSend,
@@ -33,18 +41,47 @@ export function ChatOverlay({
 }: ChatOverlayProps) {
   const [text, setText] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const stickToBottomRef = useRef(true)
+
+  const updateStickToBottom = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight
+    stickToBottomRef.current = distance < 56
+  }, [])
 
   useEffect(() => {
     const el = scrollRef.current
-    if (!el) return
+    if (!el || !stickToBottomRef.current) return
     el.scrollTop = el.scrollHeight
   }, [messages])
 
+  const submitMessage = useCallback(() => {
+    const trimmed = text.trim()
+    if (!trimmed) return
+    onSend(trimmed)
+    setText('')
+    stickToBottomRef.current = true
+    requestAnimationFrame(() => {
+      const el = scrollRef.current
+      if (el) el.scrollTop = el.scrollHeight
+    })
+  }, [onSend, text])
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!text.trim()) return
-    onSend(text)
-    setText('')
+    submitMessage()
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    submitMessage()
+  }
+
+  const handleInputBlur = () => {
+    resetIosViewportZoom()
   }
 
   const isOverlay = variant === 'overlay'
@@ -52,7 +89,7 @@ export function ChatOverlay({
   return (
     <div
       className={cn(
-        'flex flex-col h-full min-h-0',
+        'flex flex-col h-full min-h-0 max-h-full overflow-hidden',
         isOverlay
           ? 'bg-gradient-to-l from-black/90 via-black/60 to-transparent'
           : 'bg-surface-1',
@@ -118,7 +155,11 @@ export function ChatOverlay({
         )}
       </div>
 
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-2">
+      <div
+        ref={scrollRef}
+        onScroll={updateStickToBottom}
+        className="chat-messages-scroll flex-1 min-h-0 px-3 py-2 space-y-2"
+      >
         {messages.length === 0 && (
           <p
             className={cn(
@@ -172,12 +213,18 @@ export function ChatOverlay({
           )}
         >
           <input
+            ref={inputRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={handleInputBlur}
             placeholder="Mensagem..."
             maxLength={500}
+            enterKeyHint="send"
+            autoComplete="off"
+            autoCorrect="on"
             className={cn(
-              'flex-1 min-w-0 bg-transparent px-2 py-1.5 text-sm focus:outline-none',
+              'chat-input-field flex-1 min-w-0 bg-transparent px-2 py-1.5 text-base leading-normal focus:outline-none',
               isOverlay
                 ? 'text-white placeholder:text-white/40'
                 : 'text-text-primary placeholder:text-text-muted',
@@ -186,7 +233,7 @@ export function ChatOverlay({
           <button
             type="submit"
             disabled={!text.trim()}
-            className="shrink-0 h-8 w-8 rounded-md bg-accent text-black flex items-center justify-center disabled:opacity-40"
+            className="shrink-0 h-9 w-9 rounded-md bg-accent text-black flex items-center justify-center disabled:opacity-40"
             aria-label="Enviar"
           >
             <Send className="w-3.5 h-3.5" />

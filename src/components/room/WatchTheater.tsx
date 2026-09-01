@@ -449,6 +449,21 @@ export function WatchTheater({
   }, [isCoarse, isFullscreen, showChatOnVideo])
 
   useEffect(() => {
+    if (!isCoarse || !showChatOnVideo) return
+    const prevOverflow = document.body.style.overflow
+    const prevPosition = document.body.style.position
+    document.body.style.overflow = 'hidden'
+    document.body.style.position = 'fixed'
+    document.body.style.width = '100%'
+    return () => {
+      document.body.style.overflow = prevOverflow
+      document.body.style.position = prevPosition
+      document.body.style.width = ''
+      window.scrollTo(0, 0)
+    }
+  }, [isCoarse, showChatOnVideo])
+
+  useEffect(() => {
     return () => {
       if (touchGraceTimerRef.current) clearTimeout(touchGraceTimerRef.current)
     }
@@ -1084,9 +1099,9 @@ export function WatchTheater({
           {showChatOnVideo && (
             <div
               className={cn(
-                'absolute z-[60] pointer-events-auto',
+                'absolute z-[60] pointer-events-auto flex flex-col overflow-hidden',
                 isCoarse
-                  ? 'inset-x-0 bottom-0 max-h-[min(52dvh,26rem)] rounded-t-2xl overflow-hidden border-t border-white/10 shadow-2xl pb-[max(0.35rem,env(safe-area-inset-bottom))]'
+                  ? 'inset-x-0 bottom-0 h-[min(52dvh,26rem)] rounded-t-2xl border-t border-white/10 shadow-2xl pb-[max(0.35rem,env(safe-area-inset-bottom))]'
                   : isFullscreen
                     ? 'top-12 right-2 bottom-20 w-[min(92%,20rem)] sm:w-80'
                     : 'top-10 right-0 bottom-2 w-[min(92%,16rem)] sm:w-60',

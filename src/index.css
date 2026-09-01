@@ -226,9 +226,24 @@
   }
 }
 
-.theater-video-mobile {
-  contain: layout paint;
+.chat-messages-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
+
+.chat-input-field {
+  font-size: 16px;
+}
+
+@media (min-width: 1024px) {
+  .chat-input-field {
+    font-size: 0.875rem;
+  }
+}
+
 
 @media (pointer: coarse) {
   .theater-dock-btn {
