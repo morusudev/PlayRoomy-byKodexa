@@ -35,6 +35,7 @@ import { useTheaterFullscreen } from '../../hooks/useTheaterFullscreen'
 import { isSyncDriver as checkSyncDriver } from '../../utils/permissions'
 import type { ChatMessage, Participant, PlayerState, QueueItem, Role, RoomReaction } from '../../types'
 import { ChatOverlay } from './ChatOverlay'
+import { ChatNotificationStack } from './ChatNotificationStack'
 import { PlaylistPanel } from './PlaylistPanel'
 import { ParticipantList } from './ParticipantList'
 import { PlayerActionFlash } from './PlayerActionFlash'
@@ -139,6 +140,8 @@ export function WatchTheater({
   )
   const [showChatOnVideo, setShowChatOnVideo] = useState(false)
   const [fullscreenChatPref, setFullscreenChatPref] = useState(readFullscreenChatPref)
+  const [chatReadCount, setChatReadCount] = useState(0)
+  const sidebarOpenRef = useRef(false)
   const [scrubbing, setScrubbing] = useState(false)
   const [scrubTime, setScrubTime] = useState(0)
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false)
@@ -298,40 +301,46 @@ export function WatchTheater({
   }, [showFeedback])
 
   const handleToggleChat = useCallback(() => {
-    if (isFullscreen) {
+    if (isCoarse || isFullscreen) {
       setShowChatOnVideo((open) => {
-        const next = !open
-        showFeedback(next ? 'Chat' : 'Fechar', {
-          toast: next ? 'Chat no vídeo' : 'Chat fechado',
-        })
-        return next
-      })
-      return
-    }
-
-    const isLarge = window.matchMedia('(min-width: 1024px)').matches
-    if (isLarge || isCoarse) {
-      setShowSidebarChat((open) => {
         const next = !open
         showFeedback(next ? 'Chat' : 'Fechar', {
           toast: next ? 'Chat aberto' : 'Chat fechado',
         })
-        if (next) setShowChatOnVideo(false)
         return next
       })
       return
     }
-    setShowChatOnVideo((open) => {
+
+    setShowSidebarChat((open) => {
       const next = !open
       showFeedback(next ? 'Chat' : 'Fechar', {
-        toast: next ? 'Chat no vídeo' : 'Chat fechado',
+        toast: next ? 'Chat aberto' : 'Chat fechado',
       })
-      if (next) setShowSidebarChat(false)
+      if (next) setShowChatOnVideo(false)
       return next
     })
   }, [isCoarse, isFullscreen, showFeedback])
 
-  const chatActive = isFullscreen ? showChatOnVideo : showChatOnVideo || showSidebarChat
+  const chatOpen =
+    isCoarse || isFullscreen ? showChatOnVideo : showChatOnVideo || showSidebarChat
+  const chatActive = chatOpen
+  const unreadChat = chatOpen ? 0 : Math.max(0, chatMessages.length - chatReadCount)
+
+  const openChat = useCallback(() => {
+    revealControls()
+    if (isCoarse || isFullscreen) {
+      setShowChatOnVideo(true)
+      return
+    }
+    setShowSidebarChat(true)
+  }, [isCoarse, isFullscreen, revealControls])
+
+  useEffect(() => {
+    if (chatOpen) setChatReadCount(chatMessages.length)
+  }, [chatOpen, chatMessages.length])
+
+  sidebarOpenRef.current = showSidebarChat
 
   const toggleFullscreenChatPref = useCallback(() => {
     setFullscreenChatPref((prev) => {
@@ -421,12 +430,23 @@ export function WatchTheater({
   }, [isFullscreen, showPlaylist, showSidebarChat, showChatOnVideo, isCoarse])
 
   useEffect(() => {
-    if (isFullscreen) {
-      setShowSidebarChat(false)
-      if (fullscreenChatPref) setShowChatOnVideo(true)
-      else setShowChatOnVideo(false)
+    if (!isFullscreen) return
+    setShowSidebarChat(false)
+    if (isCoarse) {
+      setShowChatOnVideo(fullscreenChatPref)
+    } else {
+      setShowChatOnVideo(sidebarOpenRef.current)
     }
-  }, [fullscreenChatPref, isFullscreen])
+  }, [fullscreenChatPref, isCoarse, isFullscreen])
+
+  const wasFullscreenRef = useRef(isFullscreen)
+  useEffect(() => {
+    if (wasFullscreenRef.current && !isFullscreen && !isCoarse && showChatOnVideo) {
+      setShowSidebarChat(true)
+      setShowChatOnVideo(false)
+    }
+    wasFullscreenRef.current = isFullscreen
+  }, [isCoarse, isFullscreen, showChatOnVideo])
 
   useEffect(() => {
     return () => {
@@ -575,7 +595,7 @@ export function WatchTheater({
       <button
         type="button"
         onClick={handleToggleChat}
-        className={dockBtnActive(chatActive)}
+        className={cn(dockBtnActive(chatActive), 'relative')}
         title="Chat"
         aria-label="Chat"
       >
@@ -584,21 +604,26 @@ export function WatchTheater({
         ) : (
           <MessageSquareOff className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
         )}
+        {unreadChat > 0 ? (
+          <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-0.5 rounded-full bg-accent text-[8px] font-bold text-black flex items-center justify-center leading-none">
+            {unreadChat > 9 ? '9+' : unreadChat}
+          </span>
+        ) : null}
       </button>
-      {isFullscreen ? (
+      {isCoarse && isFullscreen ? (
         <button
           type="button"
           onClick={toggleFullscreenChatPref}
           className={dockBtnActive(fullscreenChatPref)}
           title={
             fullscreenChatPref
-              ? 'Desativar chat automático em tela cheia'
-              : 'Ativar chat automático em tela cheia'
+              ? 'Não abrir chat ao entrar em tela cheia'
+              : 'Abrir chat ao entrar em tela cheia'
           }
           aria-label={
             fullscreenChatPref
-              ? 'Desativar chat automático em tela cheia'
-              : 'Ativar chat automático em tela cheia'
+              ? 'Não abrir chat ao entrar em tela cheia'
+              : 'Abrir chat ao entrar em tela cheia'
           }
         >
           {fullscreenChatPref ? (
@@ -761,8 +786,13 @@ export function WatchTheater({
         <button type="button" onClick={handleMuteToggle} className={overlayBtn} aria-label="Volume">
           {muted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
         </button>
-        <button type="button" onClick={handleToggleChat} className={dockBtnActive(chatActive)} aria-label="Chat">
+        <button type="button" onClick={handleToggleChat} className={cn(dockBtnActive(chatActive), 'relative')} aria-label="Chat">
           {chatActive ? <MessageSquare className="w-5 h-5" /> : <MessageSquareOff className="w-5 h-5" />}
+          {unreadChat > 0 ? (
+            <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full bg-accent text-[9px] font-bold text-black flex items-center justify-center leading-none">
+              {unreadChat > 9 ? '9+' : unreadChat}
+            </span>
+          ) : null}
         </button>
         {canDrive ? (
           <button type="button" onClick={handleTogglePlaylist} className={dockBtnAccent(showPlaylist)} aria-label="Playlist">
@@ -1001,8 +1031,8 @@ export function WatchTheater({
                       <strong className="text-text-primary">direita</strong> do vídeo para mais ou menos{' '}
                       {SEEK_STEP_SEC} segundos.
                     </li>
-                    <li>Botão de play grande aparece quando o vídeo está pausado.</li>
-                    <li>Chat fixo embaixo do vídeo. Use o ícone de mensagem.</li>
+                    <li>Chat abre em painel na parte de baixo. Toque na notificação para abrir.</li>
+                    <li>Em tela cheia, use o alfinete para abrir o chat automaticamente.</li>
                   </ul>
                 ) : null}
               </div>
@@ -1032,13 +1062,34 @@ export function WatchTheater({
             </span>
           </div>
 
+          <ChatNotificationStack
+            messages={chatMessages}
+            localUserId={localUserId}
+            chatOpen={chatOpen}
+            onOpenChat={openChat}
+            className={cn(
+              isCoarse ? 'left-3 right-3 top-12' : 'right-3 top-12 left-auto w-72',
+            )}
+          />
+
+          {showChatOnVideo && isCoarse ? (
+            <button
+              type="button"
+              className="absolute inset-0 z-[55] bg-black/45 pointer-events-auto"
+              onClick={() => setShowChatOnVideo(false)}
+              aria-label="Fechar chat"
+            />
+          ) : null}
+
           {showChatOnVideo && (
             <div
               className={cn(
                 'absolute z-[60] pointer-events-auto',
-                isFullscreen
-                  ? 'top-12 right-2 bottom-20 w-[min(92%,20rem)] sm:w-80'
-                  : 'top-10 right-0 bottom-2 w-[min(92%,16rem)] sm:w-60',
+                isCoarse
+                  ? 'inset-x-0 bottom-0 max-h-[min(52dvh,26rem)] rounded-t-2xl overflow-hidden border-t border-white/10 shadow-2xl pb-[max(0.35rem,env(safe-area-inset-bottom))]'
+                  : isFullscreen
+                    ? 'top-12 right-2 bottom-20 w-[min(92%,20rem)] sm:w-80'
+                    : 'top-10 right-0 bottom-2 w-[min(92%,16rem)] sm:w-60',
               )}
             >
               <ChatOverlay
@@ -1048,9 +1099,14 @@ export function WatchTheater({
                 reactionsEnabled={connected}
                 localUserId={localUserId}
                 variant="overlay"
-                className="h-full rounded-xl overflow-hidden border border-white/10 shadow-2xl"
+                className={cn(
+                  'h-full overflow-hidden',
+                  isCoarse
+                    ? 'rounded-t-2xl bg-black/94'
+                    : 'rounded-xl border border-white/10 shadow-2xl',
+                )}
                 onClose={() => setShowChatOnVideo(false)}
-                showFullscreenPref={isFullscreen}
+                showFullscreenPref={isCoarse && isFullscreen}
                 fullscreenChatPref={fullscreenChatPref}
                 onToggleFullscreenChatPref={toggleFullscreenChatPref}
               />
@@ -1096,22 +1152,9 @@ export function WatchTheater({
             </div>
           )}
         </div>
-
-        {!isFullscreen && showSidebarChat && !showChatOnVideo && (
-          <div className="lg:hidden flex flex-col min-h-[8rem] max-h-[32dvh] flex-1 shrink-0 border-t border-border-subtle bg-surface-1">
-            <ChatOverlay
-              messages={chatMessages}
-              onSend={onSendChat}
-              onReact={onSendReaction}
-              reactionsEnabled={connected}
-              localUserId={localUserId}
-              variant="panel"
-            />
-          </div>
-        )}
       </div>
 
-      {!isFullscreen && showSidebarChat && !showChatOnVideo && (
+      {!isFullscreen && !isCoarse && showSidebarChat && !showChatOnVideo && (
         <div className="hidden lg:flex w-72 xl:w-80 shrink-0 flex-col min-h-0 border-l border-border-subtle bg-surface-1">
           <ChatOverlay
             messages={chatMessages}

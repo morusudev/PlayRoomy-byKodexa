@@ -83,13 +83,13 @@ export function ChatOverlay({
                 )}
                 title={
                   fullscreenChatPref
-                    ? 'Desativar chat automático em tela cheia'
-                    : 'Ativar chat automático em tela cheia'
+                    ? 'Não abrir chat ao entrar em tela cheia'
+                    : 'Abrir chat ao entrar em tela cheia'
                 }
                 aria-label={
                   fullscreenChatPref
-                    ? 'Desativar chat automático em tela cheia'
-                    : 'Ativar chat automático em tela cheia'
+                    ? 'Não abrir chat ao entrar em tela cheia'
+                    : 'Abrir chat ao entrar em tela cheia'
                 }
               >
                 {fullscreenChatPref ? (
