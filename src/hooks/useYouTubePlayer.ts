@@ -18,7 +18,9 @@ interface UseYouTubePlayerOptions {
   stageRef: RefObject<HTMLDivElement | null>
   size: { width: number; height: number }
   playerState: PlayerState | null
-  isAuthority: boolean
+  canSendCommands: boolean
+  isSyncDriver: boolean
+  isCoarse?: boolean
   onPlay: (time: number) => void
   onPause: (time: number) => void
   onSeek: (time: number) => void
@@ -32,8 +34,8 @@ function applyIframeSize(player: YtPlayer, width: number, height: number) {
     const iframe = player.getIframe()
     iframe.width = String(width)
     iframe.height = String(height)
-    iframe.style.width = `${width}px`
-    iframe.style.height = `${height}px`
+    iframe.style.width = '100%'
+    iframe.style.height = '100%'
     iframe.style.maxWidth = '100%'
     iframe.style.maxHeight = '100%'
     iframe.style.border = '0'
@@ -41,6 +43,7 @@ function applyIframeSize(player: YtPlayer, width: number, height: number) {
     iframe.style.position = 'absolute'
     iframe.style.inset = '0'
     iframe.style.transform = 'none'
+    iframe.style.objectFit = 'contain'
   } catch {
     // ignore
   }
@@ -75,7 +78,9 @@ export function useYouTubePlayer({
   stageRef,
   size,
   playerState,
-  isAuthority,
+  canSendCommands,
+  isSyncDriver,
+  isCoarse = false,
   onPlay,
   onPause,
   onSeek,
@@ -95,23 +100,29 @@ export function useYouTubePlayer({
   const created = useRef(false)
   const audioRef = useRef({ muted: false, volume: 80 })
 
-  const isAuthorityRef = useRef(isAuthority)
+  const canSendRef = useRef(canSendCommands)
+  const isSyncDriverRef = useRef(isSyncDriver)
   const callbacksRef = useRef({ onPlay, onPause, onSeek, onVideoEnded, onError })
   const stateRef = useRef(playerState)
   const sizeRef = useRef(size)
 
-  isAuthorityRef.current = isAuthority
+  canSendRef.current = canSendCommands
+  isSyncDriverRef.current = isSyncDriver
   callbacksRef.current = { onPlay, onPause, onSeek, onVideoEnded, onError }
   stateRef.current = playerState
   sizeRef.current = size
   audioRef.current = { muted, volume }
+
+  const minWidth = isCoarse ? 120 : 160
+  const minHeight = isCoarse ? 68 : 90
+  const loadSettleMs = isCoarse ? 900 : 500
 
   const silenceLocal = (ms: number) => {
     ignoreLocalUntil.current = Date.now() + ms
   }
 
   useEffect(() => {
-    const readyToMount = size.width >= 160 && size.height >= 90
+    const readyToMount = size.width >= minWidth && size.height >= minHeight
     if (!readyToMount) return
     if (created.current) return
 
@@ -124,8 +135,8 @@ export function useYouTubePlayer({
     stage.innerHTML = ''
     const mount = document.createElement('div')
     mountRef.current = mount
-    mount.style.width = `${size.width}px`
-    mount.style.height = `${size.height}px`
+    mount.style.width = '100%'
+    mount.style.height = '100%'
     mount.style.position = 'absolute'
     mount.style.inset = '0'
     stage.appendChild(mount)
@@ -154,7 +165,7 @@ export function useYouTubePlayer({
       events: {
         onStateChange: (event) => {
           if (Date.now() < ignoreLocalUntil.current) return
-          if (!isAuthorityRef.current) return
+          if (!isSyncDriverRef.current) return
 
           const player = playerRef.current
           if (!player) return
@@ -186,7 +197,7 @@ export function useYouTubePlayer({
             pauseTimer.current = setTimeout(() => {
               pauseTimer.current = null
               if (Date.now() < ignoreLocalUntil.current) return
-              if (!isAuthorityRef.current) return
+              if (!isSyncDriverRef.current) return
               const p = playerRef.current
               if (!p) return
               if (p.getPlayerState() !== YT.PlayerState.PAUSED) return
@@ -228,14 +239,14 @@ export function useYouTubePlayer({
       if (stageRef.current) stageRef.current.innerHTML = ''
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [size.width >= 160 && size.height >= 90])
+  }, [size.width >= minWidth && size.height >= minHeight, minWidth, minHeight])
 
   useEffect(() => {
     const player = playerRef.current
     if (!player || !isReady) return
-    if (size.width < 160 || size.height < 90) return
+    if (size.width < minWidth || size.height < minHeight) return
     applyIframeSize(player, size.width, size.height)
-  }, [size.width, size.height, isReady])
+  }, [size.width, size.height, isReady, minWidth, minHeight])
 
   useEffect(() => {
     const player = playerRef.current
@@ -286,11 +297,11 @@ export function useYouTubePlayer({
       silenceLocal(2000)
       applyRemotePlayback(playerRef.current, latest, audioRef.current)
       lastRemoteKey.current = `${latest.playing}:${latest.updatedAt}`
-    }, 500)
-  }, [playerState?.videoId, isReady])
+    }, loadSettleMs)
+  }, [playerState?.videoId, isReady, loadSettleMs])
 
   useEffect(() => {
-    if (isAuthority) return
+    if (isSyncDriver) return
 
     const player = playerRef.current
     const state = playerState
@@ -304,7 +315,7 @@ export function useYouTubePlayer({
     silenceLocal(1200)
     applyRemotePlayback(player, state, audioRef.current)
   }, [
-    isAuthority,
+    isSyncDriver,
     isReady,
     playerState?.videoId,
     playerState?.playing,
@@ -313,7 +324,7 @@ export function useYouTubePlayer({
   ])
 
   useEffect(() => {
-    if (isAuthority) return
+    if (isSyncDriver) return
     const id = window.setInterval(() => {
       const player = playerRef.current
       const state = stateRef.current
@@ -325,10 +336,10 @@ export function useYouTubePlayer({
       }
     }, 4000)
     return () => window.clearInterval(id)
-  }, [isAuthority, isReady])
+  }, [isSyncDriver, isReady])
 
   useEffect(() => {
-    if (!isAuthority) return
+    if (!isSyncDriver) return
     const id = window.setInterval(() => {
       const player = playerRef.current
       const state = stateRef.current
@@ -338,10 +349,10 @@ export function useYouTubePlayer({
       callbacksRef.current.onSeek(player.getCurrentTime())
     }, 5000)
     return () => window.clearInterval(id)
-  }, [isAuthority, isReady])
+  }, [isSyncDriver, isReady])
 
   const handleSeek = useCallback((time: number) => {
-    if (!isAuthorityRef.current) return
+    if (!canSendRef.current) return
     callbacksRef.current.onSeek(time)
   }, [])
 
@@ -376,8 +387,7 @@ export function useYouTubePlayer({
 
   const play = useCallback(() => {
     const player = playerRef.current
-    if (!player) return
-    if (!isAuthorityRef.current) return
+    if (!player || !canSendRef.current) return
     silenceLocal(600)
     const t = player.getCurrentTime()
     player.playVideo()
@@ -386,8 +396,7 @@ export function useYouTubePlayer({
 
   const pause = useCallback(() => {
     const player = playerRef.current
-    if (!player) return
-    if (!isAuthorityRef.current) return
+    if (!player || !canSendRef.current) return
     silenceLocal(600)
     const t = player.getCurrentTime()
     player.pauseVideo()
@@ -396,8 +405,7 @@ export function useYouTubePlayer({
 
   const seekBy = useCallback((delta: number) => {
     const player = playerRef.current
-    if (!player) return
-    if (!isAuthorityRef.current) return
+    if (!player || !canSendRef.current) return
     silenceLocal(600)
     const t = Math.max(0, player.getCurrentTime() + delta)
     player.seekTo(t, true)
@@ -406,8 +414,7 @@ export function useYouTubePlayer({
 
   const seekTo = useCallback((time: number) => {
     const player = playerRef.current
-    if (!player) return
-    if (!isAuthorityRef.current) return
+    if (!player || !canSendRef.current) return
     silenceLocal(600)
     const duration = player.getDuration()
     const t =
@@ -429,9 +436,9 @@ export function useYouTubePlayer({
 
       const duration = player.getDuration() || 0
       let current = player.getCurrentTime() || 0
-      if (!isAuthorityRef.current && state?.playing) {
+      if (!isSyncDriverRef.current && state?.playing) {
         current = getExpectedTime(state)
-      } else if (!isAuthorityRef.current && state) {
+      } else if (!isSyncDriverRef.current && state) {
         current = state.currentTime
       }
 

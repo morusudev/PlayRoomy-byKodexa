@@ -762,6 +762,11 @@ export function attachRoomyWss(httpServer: RoomyHttpServer, options: AttachRoomy
     if (msg.role === 'owner') return
     if (actor!.role === 'admin' && msg.role === 'admin') return
     target.role = msg.role
+    if (msg.role === 'controller') {
+      room.controllerId = target.id
+    } else if (room.controllerId === target.id) {
+      room.controllerId = null
+    }
     broadcast(room, sockets, { type: 'state', state: publicState(room) })
   }
 

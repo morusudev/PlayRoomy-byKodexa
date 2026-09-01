@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import {
   Maximize,
   Minimize,
@@ -20,6 +20,7 @@ import {
   VideoOff,
   Pin,
   PinOff,
+  Loader2,
 } from 'lucide-react'
 import {
   readFullscreenChatPref,
@@ -30,6 +31,8 @@ import { useAutoHideControls } from '../../hooks/useAutoHideControls'
 import { usePlayerFeedback } from '../../hooks/usePlayerFeedback'
 import { useTheaterShortcuts, THEATER_SHORTCUTS } from '../../hooks/useTheaterShortcuts'
 import { useCoarsePointer } from '../../hooks/useCoarsePointer'
+import { useTheaterFullscreen } from '../../hooks/useTheaterFullscreen'
+import { isSyncDriver as checkSyncDriver } from '../../utils/permissions'
 import type { ChatMessage, Participant, PlayerState, QueueItem, Role, RoomReaction } from '../../types'
 import { ChatOverlay } from './ChatOverlay'
 import { PlaylistPanel } from './PlaylistPanel'
@@ -129,7 +132,6 @@ export function WatchTheater({
   const videoHostRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
   const [box, setBox] = useState({ width: 0, height: 0 })
-  const [isFullscreen, setIsFullscreen] = useState(false)
   const [showPlaylist, setShowPlaylist] = useState(false)
   const [showPeople, setShowPeople] = useState(false)
   const [showSidebarChat, setShowSidebarChat] = useState(
@@ -141,12 +143,24 @@ export function WatchTheater({
   const [scrubTime, setScrubTime] = useState(0)
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false)
   const [touching, setTouching] = useState(false)
+  const [touchGrace, setTouchGrace] = useState(false)
   const zoneTapRef = useRef(0)
+  const touchGraceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const localParticipant = useMemo(
+    () => participants.find((p) => p.id === localUserId),
+    [participants, localUserId],
+  )
 
   const canDrive = isAuthority || isOwner || canChangeVideo
+  const syncDriver = useMemo(
+    () => checkSyncDriver(localParticipant, controllerId, ownerId),
+    [localParticipant, controllerId, ownerId],
+  )
   const hasVideo = !!playerState?.videoId
   const isCoarse = useCoarsePointer()
-  const uiPinned = scrubbing || touching || showShortcutsHelp
+  const uiPinned = scrubbing || touching || touchGrace || showShortcutsHelp
+  const { isFullscreen, isImmersive, toggle: toggleFullscreen } = useTheaterFullscreen(theaterRef)
   const { flashMessage, flashLarge, showFeedback } = usePlayerFeedback()
   const { controlsVisible, revealControls, hideControls } = useAutoHideControls(
     uiPinned,
@@ -173,7 +187,9 @@ export function WatchTheater({
       stageRef,
       size: box,
       playerState,
-      isAuthority: canDrive,
+      canSendCommands: canDrive,
+      isSyncDriver: syncDriver,
+      isCoarse,
       onPlay,
       onPause,
       onSeek,
@@ -254,15 +270,11 @@ export function WatchTheater({
   }, [canGoNext, onSkipQueue, showFeedback])
 
   const handleToggleFullscreen = useCallback(async () => {
-    if (!theaterRef.current) return
-    if (!document.fullscreenElement) {
-      await theaterRef.current.requestFullscreen()
-      showFeedback('Tela cheia', { toast: 'Modo tela cheia' })
-    } else {
-      await document.exitFullscreen()
-      showFeedback('Sair', { toast: 'Saiu da tela cheia' })
-    }
-  }, [showFeedback])
+    const entered = await toggleFullscreen()
+    showFeedback(entered ? 'Tela cheia' : 'Sair', {
+      toast: entered ? 'Modo tela cheia' : 'Saiu da tela cheia',
+    })
+  }, [showFeedback, toggleFullscreen])
 
   const handleTogglePlaylist = useCallback(() => {
     setShowPlaylist((open) => {
@@ -369,7 +381,9 @@ export function WatchTheater({
       const rect = host.getBoundingClientRect()
       const width = Math.max(0, Math.floor(rect.width))
       const height = Math.max(0, Math.floor(rect.height))
-      if (width < 160 || height < 90) return
+      const minW = isCoarse ? 120 : 160
+      const minH = isCoarse ? 68 : 90
+      if (width < minW || height < minH) return
       setBox((prev) =>
         prev.width === width && prev.height === height ? prev : { width, height },
       )
@@ -379,33 +393,60 @@ export function WatchTheater({
     const ro = new ResizeObserver(() => update())
     ro.observe(host)
     window.addEventListener('resize', update)
+    window.visualViewport?.addEventListener('resize', update)
+    window.visualViewport?.addEventListener('scroll', update)
+    window.addEventListener('orientationchange', update)
     const t = window.setTimeout(update, 80)
+    const t2 = window.setTimeout(update, 320)
     return () => {
       ro.disconnect()
       window.removeEventListener('resize', update)
+      window.visualViewport?.removeEventListener('resize', update)
+      window.visualViewport?.removeEventListener('scroll', update)
+      window.removeEventListener('orientationchange', update)
       window.clearTimeout(t)
+      window.clearTimeout(t2)
     }
-  }, [isFullscreen, showPlaylist, showSidebarChat, showChatOnVideo])
+  }, [isFullscreen, showPlaylist, showSidebarChat, showChatOnVideo, isCoarse])
 
   useEffect(() => {
-    const onFs = () => {
-      const fs = !!document.fullscreenElement
-      setIsFullscreen(fs)
-      if (fs) {
-        setShowSidebarChat(false)
-        if (fullscreenChatPref) setShowChatOnVideo(true)
-        else setShowChatOnVideo(false)
-      }
+    if (isFullscreen) {
+      setShowSidebarChat(false)
+      if (fullscreenChatPref) setShowChatOnVideo(true)
+      else setShowChatOnVideo(false)
     }
-    document.addEventListener('fullscreenchange', onFs)
-    return () => document.removeEventListener('fullscreenchange', onFs)
-  }, [fullscreenChatPref])
+  }, [fullscreenChatPref, isFullscreen])
+
+  useEffect(() => {
+    return () => {
+      if (touchGraceTimerRef.current) clearTimeout(touchGraceTimerRef.current)
+    }
+  }, [])
 
   const finishScrub = () => {
     if (!scrubbing) return
     seekTo(scrubTime)
     setScrubbing(false)
     showFeedback(formatTime(scrubTime), { toast: `Posição: ${formatTime(scrubTime)}` })
+  }
+
+  const handleVideoTouchStart = () => {
+    setTouching(true)
+    setTouchGrace(true)
+    if (touchGraceTimerRef.current) clearTimeout(touchGraceTimerRef.current)
+    revealControls()
+  }
+
+  const handleVideoTouchEnd = () => {
+    setTouching(false)
+    revealControls()
+    if (touchGraceTimerRef.current) clearTimeout(touchGraceTimerRef.current)
+    touchGraceTimerRef.current = setTimeout(() => setTouchGrace(false), 2800)
+  }
+
+  const handleVideoTap = () => {
+    if (!isCoarse || !hasVideo) return
+    revealControls()
   }
 
   const handleZoneTap = (direction: 'back' | 'forward') => {
@@ -420,17 +461,16 @@ export function WatchTheater({
     revealControls()
   }
 
-  const overlayBtn =
-    'theater-dock-btn'
+  const overlayBtn = cn('theater-dock-btn', isCoarse && 'theater-dock-btn-coarse')
 
   const dockBtnActive = (active: boolean) => cn(overlayBtn, active && 'is-active')
   const dockBtnAccent = (active: boolean) =>
     cn(overlayBtn, active ? 'is-accent' : undefined)
 
   const playBtnClass = cn(
-    'rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 font-bold shadow-md transition-all duration-200 active:scale-95 hover:-translate-y-0.5 touch-manipulation',
-    'h-9 w-9 sm:h-11 sm:w-11',
-    hasVideo ? 'bg-accent text-black hover:bg-accent-hover hover:shadow-accent/30' : 'bg-white/10 text-white/40 cursor-not-allowed',
+    'rounded-xl flex items-center justify-center shrink-0 font-bold shadow-md transition-all duration-200 active:scale-95 touch-manipulation',
+    isCoarse ? 'h-12 w-12' : 'h-9 w-9 sm:h-11 sm:w-11',
+    hasVideo ? 'bg-accent text-black' : 'bg-white/10 text-white/40 cursor-not-allowed',
   )
 
   const transportControlsInner = canDrive ? (
@@ -499,31 +539,33 @@ export function WatchTheater({
   )
 
   const volumeControl = (
-    <div className="theater-dock-group flex-1 min-w-0 max-w-[9rem] sm:max-w-[11rem]">
+    <div className={cn('theater-dock-group', isCoarse ? 'max-w-[3.25rem]' : 'flex-1 min-w-0 max-w-[9rem] sm:max-w-[11rem]')}>
       <button type="button" onClick={handleMuteToggle} className={overlayBtn} aria-label="Volume" title="Mutar">
         {muted || volume === 0 ? (
-          <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          <VolumeX className="w-4 h-4 sm:w-4 sm:h-4" />
         ) : (
-          <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          <Volume2 className="w-4 h-4 sm:w-4 sm:h-4" />
         )}
       </button>
-      <div
-        className="theater-volume-track"
-        style={{ '--vol-pct': `${displayVol}%` } as CSSProperties}
-      >
-        <div className="theater-volume-fill" aria-hidden />
-        <input
-          type="range"
-          min={0}
-          max={100}
-          step={1}
-          value={displayVol}
-          onInput={(e) => changeVolume(Number(e.currentTarget.value))}
-          onChange={(e) => changeVolume(Number(e.target.value))}
-          className="roomy-volume absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-          aria-label="Volume local"
-        />
-      </div>
+      {!isCoarse ? (
+        <div
+          className="theater-volume-track"
+          style={{ '--vol-pct': `${displayVol}%` } as CSSProperties}
+        >
+          <div className="theater-volume-fill" aria-hidden />
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={displayVol}
+            onInput={(e) => changeVolume(Number(e.currentTarget.value))}
+            onChange={(e) => changeVolume(Number(e.target.value))}
+            className="roomy-volume absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            aria-label="Volume local"
+          />
+        </div>
+      ) : null}
     </div>
   )
 
@@ -645,7 +687,7 @@ export function WatchTheater({
   const utilityDock = (
     <div className="theater-dock flex-1 min-w-0 justify-end overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {volumeControl}
-      <div className="theater-dock-divider hidden sm:block" aria-hidden />
+      {!isCoarse ? <div className="theater-dock-divider hidden sm:block" aria-hidden /> : null}
       {socialControls}
       {roomControls}
       {settingsControls}
@@ -657,6 +699,7 @@ export function WatchTheater({
       ref={theaterRef}
       className={cn(
         'w-full h-full min-h-0 flex flex-col lg:flex-row overflow-hidden bg-surface-0',
+        isImmersive && 'theater-immersive',
         isFullscreen ? 'rounded-none' : 'lg:rounded-2xl lg:border lg:border-border-subtle lg:bg-surface-1',
       )}
     >
@@ -665,27 +708,14 @@ export function WatchTheater({
           ref={videoHostRef}
           className={cn(
             'group/video relative w-full bg-black overflow-hidden isolate touch-manipulation',
-            'flex-1 min-h-0 max-lg:min-h-[48dvh] lg:min-h-[240px]',
+            'flex-1 min-h-0 max-lg:min-h-[52dvh] lg:min-h-[240px]',
           )}
           onMouseMove={hasVideo ? revealControls : undefined}
           onMouseEnter={hasVideo ? revealControls : undefined}
           onMouseLeave={hasVideo ? hideControls : undefined}
-          onTouchStart={
-            hasVideo
-              ? () => {
-                  setTouching(true)
-                  revealControls()
-                }
-              : undefined
-          }
-          onTouchEnd={
-            hasVideo
-              ? () => {
-                  setTouching(false)
-                  revealControls()
-                }
-              : undefined
-          }
+          onTouchStart={hasVideo ? handleVideoTouchStart : undefined}
+          onTouchEnd={hasVideo ? handleVideoTouchEnd : undefined}
+          onClick={hasVideo ? handleVideoTap : undefined}
         >
           {!hasVideo && (
             <div className="absolute inset-0 z-10 flex flex-col animate-fade-in">
@@ -716,9 +746,16 @@ export function WatchTheater({
 
           <div
             ref={stageRef}
-            className="absolute inset-0 z-0 overflow-hidden"
-            style={{ opacity: isReady ? 1 : 0, pointerEvents: 'none' }}
+            className="absolute inset-0 z-0 overflow-hidden flex items-center justify-center pointer-events-none"
+            style={{ opacity: isReady ? 1 : 0, transition: 'opacity 0.35s ease' }}
           />
+
+          {hasVideo && !isReady && (
+            <div className="absolute inset-0 z-[12] flex flex-col items-center justify-center gap-3 bg-black/85 pointer-events-none">
+              <Loader2 className="w-8 h-8 text-accent animate-spin" />
+              <p className="text-sm text-white/70">Carregando vídeo...</p>
+            </div>
+          )}
 
           {hasVideo && (
             <div className="absolute inset-0 z-[5] pointer-events-none" aria-hidden />
@@ -728,15 +765,21 @@ export function WatchTheater({
             <>
               <button
                 type="button"
-                className="absolute left-0 top-0 bottom-14 w-[38%] z-[8] touch-manipulation"
+                className="absolute left-0 top-0 bottom-24 w-[34%] z-[8] touch-manipulation"
                 aria-label={`Voltar ${SEEK_STEP_SEC} segundos`}
-                onClick={() => handleZoneTap('back')}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleZoneTap('back')
+                }}
               />
               <button
                 type="button"
-                className="absolute right-0 top-0 bottom-14 w-[38%] z-[8] touch-manipulation"
+                className="absolute right-0 top-0 bottom-24 w-[34%] z-[8] touch-manipulation"
                 aria-label={`Avançar ${SEEK_STEP_SEC} segundos`}
-                onClick={() => handleZoneTap('forward')}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleZoneTap('forward')
+                }}
               />
             </>
           )}
@@ -748,14 +791,17 @@ export function WatchTheater({
             <div className="absolute inset-0 z-[15] flex items-center justify-center pointer-events-none">
               <button
                 type="button"
-                onClick={handlePlayPause}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handlePlayPause()
+                }}
                 className={cn(
-                  'h-14 w-14 sm:h-[4.25rem] sm:w-[4.25rem] rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 touch-manipulation',
-                  'bg-black/55 backdrop-blur-md border border-white/25 text-white',
-                  'hover:bg-accent hover:text-black hover:border-accent hover:scale-105',
+                  'rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 touch-manipulation pointer-events-auto',
+                  isCoarse ? 'h-16 w-16' : 'h-14 w-14 sm:h-[4.25rem] sm:w-[4.25rem]',
+                  'bg-black/60 backdrop-blur-md border border-white/25 text-white active:scale-95',
                   isCoarse
-                    ? controlsVisible
-                      ? 'opacity-100 scale-100 pointer-events-auto'
+                    ? !isPlaying || controlsVisible
+                      ? 'opacity-100 scale-100'
                       : 'opacity-0 scale-90 pointer-events-none'
                     : cn(
                         'opacity-0 scale-90 pointer-events-none',
@@ -767,9 +813,9 @@ export function WatchTheater({
                 title={isPlaying ? 'Pausar' : 'Play'}
               >
                 {isPlaying ? (
-                  <Pause className="w-7 h-7 sm:w-8 sm:h-8" strokeWidth={2.5} />
+                  <Pause className={cn(isCoarse ? 'w-8 h-8' : 'w-7 h-7 sm:w-8 sm:h-8')} strokeWidth={2.5} />
                 ) : (
-                  <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-current ml-1" />
+                  <Play className={cn(isCoarse ? 'w-8 h-8 ml-1' : 'w-7 h-7 sm:w-8 sm:h-8 ml-1')} fill="currentColor" />
                 )}
               </button>
             </div>
@@ -785,7 +831,7 @@ export function WatchTheater({
               >
                 {duration > 0 && (
                   <div className="mb-1 sm:mb-2.5">
-                    <div className="relative h-1 sm:h-2 rounded-full bg-white/20">
+                    <div className={cn('relative rounded-full bg-white/20', isCoarse ? 'h-3' : 'h-1 sm:h-2')}>
                       <div
                         className="absolute inset-y-0 left-0 rounded-full bg-accent"
                         style={{ width: `${progressPct}%` }}
@@ -819,7 +865,7 @@ export function WatchTheater({
                   </div>
                 )}
 
-                <div className="flex flex-col gap-2.5 sm:gap-3 min-w-0">
+                <div className={cn('flex flex-col min-w-0', isCoarse ? 'gap-3' : 'gap-2.5 sm:gap-3')}>
                   <div className="flex justify-center">{transportControls}</div>
                   <div className="theater-dock min-w-0">
                     {reactionDock}
@@ -861,13 +907,13 @@ export function WatchTheater({
                 </ul>
                 {isCoarse ? (
                   <ul className="space-y-2 text-xs text-text-secondary">
-                    <li>Toque na tela para mostrar ou esconder os controles.</li>
+                    <li>Toque na tela para mostrar os controles.</li>
                     <li>
                       Toque duas vezes na <strong className="text-text-primary">esquerda</strong> ou{' '}
                       <strong className="text-text-primary">direita</strong> do vídeo para mais ou menos{' '}
                       {SEEK_STEP_SEC} segundos.
                     </li>
-                    <li>Botões maiores e barra de progresso mais grossa para o dedo.</li>
+                    <li>Botão de play grande aparece quando o vídeo está pausado.</li>
                     <li>Chat fixo embaixo do vídeo. Use o ícone de mensagem.</li>
                   </ul>
                 ) : null}
@@ -891,10 +937,10 @@ export function WatchTheater({
             <span
               className={cn(
                 'text-[9px] sm:text-[11px] px-1 py-0.5 sm:px-1.5 sm:py-0.5 rounded',
-                canDrive ? 'bg-accent/90 text-black font-semibold' : 'bg-black/50 text-white/70',
+                syncDriver ? 'bg-accent/90 text-black font-semibold' : 'bg-black/50 text-white/70',
               )}
             >
-              {canDrive ? 'Você controla' : 'Sync'}
+              {syncDriver ? 'Você controla' : canDrive ? 'Pode controlar' : 'Sync'}
             </span>
           </div>
 

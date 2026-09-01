@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 const IDLE_HIDE_MS = 2800
-const IDLE_HIDE_MOBILE_MS = 4500
+const IDLE_HIDE_MOBILE_MS = 5500
 
 export function useAutoHideControls(pinned: boolean, enabled = true, slowHide = false) {
   const [visible, setVisible] = useState(true)

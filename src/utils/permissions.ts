@@ -12,6 +12,23 @@ export function canControlPlayer(
   return participant.role === 'admin' || participant.role === 'controller'
 }
 
+/** Who drives local playback without applying remote state (everyone else follows the room). */
+export function resolveSyncDriverId(
+  controllerId: string | null,
+  ownerId: string,
+): string {
+  return controllerId ?? ownerId
+}
+
+export function isSyncDriver(
+  participant: Participant | undefined,
+  controllerId: string | null,
+  ownerId: string,
+): boolean {
+  if (!participant) return false
+  return participant.id === resolveSyncDriverId(controllerId, ownerId)
+}
+
 export function canChangeVideo(participant: Participant | undefined, ownerId: string): boolean {
   if (!participant) return false
   return (
