@@ -2,6 +2,8 @@ import type { PlayerState } from '../types'
 import { YT } from '../services/youtube/player'
 import type { YtPlayer } from '../services/youtube/player'
 
+export type SyncApplyMode = 'desktop' | 'mobile'
+
 export function getExpectedTime(state: PlayerState, now = Date.now()): number {
   if (!state.playing) return state.currentTime
   const elapsed = (now - state.updatedAt) / 1000
@@ -28,45 +30,92 @@ export function createPlayerState(
   }
 }
 
-/** Apply remote room state without redundant seek/play cycles that stutter mobile. */
+function isBufferingOrIdle(ytState: number): boolean {
+  return (
+    ytState === YT.PlayerState.BUFFERING ||
+    ytState === YT.PlayerState.UNSTARTED ||
+    ytState === YT.PlayerState.CUED
+  )
+}
+
+function isLocallyPlaying(ytState: number): boolean {
+  return ytState === YT.PlayerState.PLAYING || ytState === YT.PlayerState.BUFFERING
+}
+
+function restoreAudio(player: YtPlayer, audio: { muted: boolean; volume: number }, delayMs: number) {
+  window.setTimeout(() => {
+    player.setVolume(audio.volume)
+    if (audio.muted) player.mute()
+    else player.unMute()
+  }, delayMs)
+}
+
+/** Apply remote room state — mobile mode avoids micro-seeks that flash the YT play overlay. */
 export function applyRemotePlayback(
   player: YtPlayer,
   state: PlayerState,
   audio: { muted: boolean; volume: number },
+  mode: SyncApplyMode = 'desktop',
+  playingChanged = true,
 ) {
+  const mobile = mode === 'mobile'
+  const ytState = player.getPlayerState()
+
+  if (isBufferingOrIdle(ytState) && mobile && !playingChanged) {
+    return
+  }
+
   const expected = Math.max(0, getExpectedTime(state))
   const localTime = player.getCurrentTime()
-  const ytState = player.getPlayerState()
-  const isLocallyPlaying =
-    ytState === YT.PlayerState.PLAYING || ytState === YT.PlayerState.BUFFERING
+  const playing = isLocallyPlaying(ytState)
+  const playSeekThreshold = mobile ? 5 : 1.5
+  const pauseSeekThreshold = mobile ? 2.5 : 0.75
 
   player.setVolume(audio.volume)
 
   if (state.playing) {
-    if (Math.abs(localTime - expected) > 1.5) {
-      player.seekTo(expected, true)
+    if (playingChanged || Math.abs(localTime - expected) > playSeekThreshold) {
+      if (Math.abs(localTime - expected) > (mobile ? 0.5 : 0.25)) {
+        player.seekTo(expected, true)
+      }
     }
-    if (!isLocallyPlaying) {
+    if (!playing) {
       player.mute()
       player.playVideo()
-      window.setTimeout(() => {
-        player.setVolume(audio.volume)
-        if (audio.muted) player.mute()
-        else player.unMute()
-      }, 350)
+      restoreAudio(player, audio, mobile ? 500 : 350)
+    } else if (audio.muted) {
+      player.mute()
     } else {
-      if (audio.muted) player.mute()
-      else player.unMute()
+      player.unMute()
     }
     return
   }
 
-  if (isLocallyPlaying) {
+  if (playing) {
     player.pauseVideo()
   }
-  if (Math.abs(localTime - state.currentTime) > 0.75) {
-    player.seekTo(state.currentTime, true)
+  if (playingChanged || Math.abs(localTime - state.currentTime) > pauseSeekThreshold) {
+    if (Math.abs(localTime - state.currentTime) > 0.4) {
+      player.seekTo(state.currentTime, true)
+    }
   }
   if (audio.muted) player.mute()
   else player.unMute()
+}
+
+export function applyRemoteSeekOnly(
+  player: YtPlayer,
+  state: PlayerState,
+  mode: SyncApplyMode = 'desktop',
+) {
+  const mobile = mode === 'mobile'
+  const ytState = player.getPlayerState()
+  if (isBufferingOrIdle(ytState)) return
+
+  const localTime = player.getCurrentTime()
+  const target = state.playing ? Math.max(0, getExpectedTime(state)) : state.currentTime
+  const threshold = mobile ? 6 : 2
+
+  if (Math.abs(localTime - target) <= threshold) return
+  player.seekTo(target, true)
 }

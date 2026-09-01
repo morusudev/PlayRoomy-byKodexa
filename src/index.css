@@ -189,6 +189,31 @@
   border-radius: 0 !important;
 }
 
+.theater-yt-stage {
+  background: #000;
+}
+
+.theater-yt-mount,
+.theater-yt-mount iframe {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Cobre o watermark do YouTube no canto (mobile) sem bloquear o vídeo */
+@media (pointer: coarse) {
+  .theater-yt-stage::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 4.5rem;
+    height: 2.75rem;
+    background: linear-gradient(to top left, rgb(0 0 0 / 0.92) 40%, transparent);
+    pointer-events: none;
+    z-index: 4;
+  }
+}
+
 .theater-video-mobile {
   contain: layout paint;
 }

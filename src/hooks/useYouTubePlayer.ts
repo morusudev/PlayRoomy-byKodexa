@@ -12,7 +12,12 @@ import {
   type YtPlayer,
 } from '../services/youtube/player'
 import type { PlayerState } from '../types'
-import { getExpectedTime, shouldCorrectDrift, applyRemotePlayback } from '../utils/sync'
+import {
+  getExpectedTime,
+  applyRemotePlayback,
+  applyRemoteSeekOnly,
+  type SyncApplyMode,
+} from '../utils/sync'
 
 interface UseYouTubePlayerOptions {
   stageRef: RefObject<HTMLDivElement | null>
@@ -28,10 +33,7 @@ interface UseYouTubePlayerOptions {
   onError: (message: string) => void
 }
 
-function applyIframeSize(player: YtPlayer, width: number, height: number, cssOnly = false) {
-  if (!cssOnly) {
-    player.setSize(width, height)
-  }
+function applyIframeStyles(player: YtPlayer) {
   try {
     const iframe = player.getIframe()
     iframe.style.width = '100%'
@@ -43,9 +45,17 @@ function applyIframeSize(player: YtPlayer, width: number, height: number, cssOnl
     iframe.style.position = 'absolute'
     iframe.style.inset = '0'
     iframe.style.transform = 'none'
+    iframe.style.pointerEvents = 'none'
   } catch {
     // ignore
   }
+}
+
+function applyIframeSize(player: YtPlayer, width: number, height: number, cssOnly = false) {
+  if (!cssOnly) {
+    player.setSize(width, height)
+  }
+  applyIframeStyles(player)
 }
 
 export function useYouTubePlayer({
@@ -66,19 +76,29 @@ export function useYouTubePlayer({
   const [isReady, setIsReady] = useState(false)
   const [muted, setMuted] = useState(false)
   const [volume, setVolume] = useState(80)
+  const [needsGesture, setNeedsGesture] = useState(false)
 
   const ignoreLocalUntil = useRef(0)
   const loadedVideoId = useRef<string | null>(null)
   const lastRemoteKey = useRef('')
+  const lastRemotePlaying = useRef<boolean | null>(null)
   const pauseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const created = useRef(false)
   const audioRef = useRef({ muted: false, volume: 80 })
+  const userActivatedRef = useRef(false)
+  const lastAppliedSize = useRef({ width: 0, height: 0 })
 
   const canSendRef = useRef(canSendCommands)
   const isSyncDriverRef = useRef(isSyncDriver)
   const callbacksRef = useRef({ onPlay, onPause, onSeek, onVideoEnded, onError })
   const stateRef = useRef(playerState)
   const sizeRef = useRef(size)
+
+  const syncMode: SyncApplyMode = isCoarse ? 'mobile' : 'desktop'
+  const minWidth = isCoarse ? 100 : 160
+  const minHeight = isCoarse ? 56 : 90
+  const loadSettleMs = isCoarse ? 550 : 500
+  const playbackTickMs = isCoarse ? 1000 : 400
 
   canSendRef.current = canSendCommands
   isSyncDriverRef.current = isSyncDriver
@@ -87,17 +107,40 @@ export function useYouTubePlayer({
   sizeRef.current = size
   audioRef.current = { muted, volume }
 
-  const minWidth = isCoarse ? 100 : 160
-  const minHeight = isCoarse ? 56 : 90
-  const loadSettleMs = isCoarse ? 700 : 500
-  const driftIntervalMs = isCoarse ? 8000 : 5000
-  const driftThreshold = isCoarse ? 3 : 2
-  const playbackTickMs = isCoarse ? 800 : 400
-  const lastAppliedSize = useRef({ width: 0, height: 0 })
-
   const silenceLocal = (ms: number) => {
     ignoreLocalUntil.current = Date.now() + ms
   }
+
+  const checkGestureNeeded = useCallback(() => {
+    const player = playerRef.current
+    const state = stateRef.current
+    if (!player || !state?.playing || isSyncDriverRef.current) {
+      setNeedsGesture(false)
+      return
+    }
+    window.setTimeout(() => {
+      const p = playerRef.current
+      const s = stateRef.current
+      if (!p || !s?.playing) return
+      const yt = p.getPlayerState()
+      if (yt !== YT.PlayerState.PLAYING && yt !== YT.PlayerState.BUFFERING) {
+        setNeedsGesture(true)
+      } else {
+        setNeedsGesture(false)
+      }
+    }, 700)
+  }, [])
+
+  const activatePlayback = useCallback(() => {
+    userActivatedRef.current = true
+    setNeedsGesture(false)
+    const player = playerRef.current
+    const state = stateRef.current
+    if (!player || !state?.videoId) return
+    silenceLocal(1200)
+    applyRemotePlayback(player, state, audioRef.current, syncMode, true)
+    checkGestureNeeded()
+  }, [checkGestureNeeded, syncMode])
 
   useEffect(() => {
     const readyToMount = size.width >= minWidth && size.height >= minHeight
@@ -113,10 +156,12 @@ export function useYouTubePlayer({
     stage.innerHTML = ''
     const mount = document.createElement('div')
     mountRef.current = mount
+    mount.className = 'theater-yt-mount'
     mount.style.width = '100%'
     mount.style.height = '100%'
     mount.style.position = 'absolute'
     mount.style.inset = '0'
+    mount.style.overflow = 'hidden'
     stage.appendChild(mount)
 
     const host = window.location.hostname
@@ -131,6 +176,7 @@ export function useYouTubePlayer({
       enablejsapi: 1,
       disablekb: 1,
       iv_load_policy: 3,
+      cc_load_policy: 0,
     }
     if (!isLanIp) {
       playerVars.origin = window.location.origin
@@ -139,6 +185,7 @@ export function useYouTubePlayer({
     createYouTubePlayer(mount, {
       width: size.width,
       height: size.height,
+      host: isLanIp ? undefined : 'https://www.youtube-nocookie.com',
       playerVars,
       events: {
         onStateChange: (event) => {
@@ -164,6 +211,7 @@ export function useYouTubePlayer({
               clearTimeout(pauseTimer.current)
               pauseTimer.current = null
             }
+            setNeedsGesture(false)
             if (remote?.playing) return
             callbacksRef.current.onPlay(time)
             return
@@ -214,6 +262,7 @@ export function useYouTubePlayer({
       setIsReady(false)
       loadedVideoId.current = null
       lastRemoteKey.current = ''
+      lastRemotePlaying.current = null
       if (stageRef.current) stageRef.current.innerHTML = ''
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -226,12 +275,16 @@ export function useYouTubePlayer({
 
     const dw = Math.abs(size.width - lastAppliedSize.current.width)
     const dh = Math.abs(size.height - lastAppliedSize.current.height)
-    if (dw < 20 && dh < 20 && lastAppliedSize.current.width > 0) {
-      applyIframeSize(player, size.width, size.height, true)
+    if (dw < 24 && dh < 24 && lastAppliedSize.current.width > 0) {
+      applyIframeStyles(player)
       return
     }
     lastAppliedSize.current = { width: size.width, height: size.height }
-    applyIframeSize(player, size.width, size.height, isCoarse)
+    if (!isCoarse) {
+      applyIframeSize(player, size.width, size.height)
+    } else {
+      applyIframeStyles(player)
+    }
   }, [size.width, size.height, isReady, minWidth, minHeight, isCoarse])
 
   useEffect(() => {
@@ -252,6 +305,7 @@ export function useYouTubePlayer({
       if (loadedVideoId.current) {
         loadedVideoId.current = null
         lastRemoteKey.current = ''
+        lastRemotePlaying.current = null
         try {
           player.stopVideo()
         } catch {
@@ -265,26 +319,32 @@ export function useYouTubePlayer({
 
     loadedVideoId.current = videoId
     lastRemoteKey.current = ''
+    lastRemotePlaying.current = null
 
     silenceLocal(3000)
-    applyIframeSize(player, sizeRef.current.width, sizeRef.current.height)
 
     const startAt = state.playing
       ? Math.max(0, getExpectedTime(state))
       : Math.max(0, state.currentTime)
 
-    player.mute()
-    player.loadVideoById(videoId, startAt)
+    if (state.playing) {
+      player.mute()
+      player.loadVideoById(videoId, startAt)
+    } else {
+      player.cueVideoById(videoId, startAt)
+    }
 
     window.setTimeout(() => {
       if (!playerRef.current || loadedVideoId.current !== videoId) return
       const latest = stateRef.current
       if (!latest || latest.videoId !== videoId) return
       silenceLocal(2000)
-      applyRemotePlayback(playerRef.current, latest, audioRef.current)
+      applyRemotePlayback(playerRef.current, latest, audioRef.current, syncMode, true)
       lastRemoteKey.current = `${latest.playing}:${latest.updatedAt}`
+      lastRemotePlaying.current = latest.playing
+      checkGestureNeeded()
     }, loadSettleMs)
-  }, [playerState?.videoId, isReady, loadSettleMs])
+  }, [playerState?.videoId, isReady, loadSettleMs, syncMode, checkGestureNeeded])
 
   useEffect(() => {
     if (isSyncDriver) return
@@ -296,36 +356,45 @@ export function useYouTubePlayer({
 
     const key = `${state.playing}:${state.updatedAt}`
     if (key === lastRemoteKey.current) return
-    lastRemoteKey.current = key
 
-    silenceLocal(isCoarse ? 1600 : 1200)
-    applyRemotePlayback(player, state, audioRef.current)
+    const playingChanged = lastRemotePlaying.current !== state.playing
+    lastRemoteKey.current = key
+    lastRemotePlaying.current = state.playing
+
+    silenceLocal(isCoarse ? 2000 : 1200)
+
+    if (playingChanged) {
+      applyRemotePlayback(player, state, audioRef.current, syncMode, true)
+      checkGestureNeeded()
+      return
+    }
+
+    applyRemoteSeekOnly(player, state, syncMode)
   }, [
     isSyncDriver,
     isReady,
     isCoarse,
+    syncMode,
     playerState?.videoId,
     playerState?.playing,
     playerState?.updatedAt,
+    checkGestureNeeded,
   ])
 
   useEffect(() => {
-    if (isSyncDriver) return
+    if (isSyncDriver || isCoarse) return
     const id = window.setInterval(() => {
       const player = playerRef.current
       const state = stateRef.current
       if (!player || !state?.videoId || !state.playing) return
       if (state.videoId !== loadedVideoId.current) return
-      if (shouldCorrectDrift(player.getCurrentTime(), state, driftThreshold)) {
-        silenceLocal(800)
-        player.seekTo(getExpectedTime(state), true)
-      }
-    }, driftIntervalMs)
+      applyRemoteSeekOnly(player, state, 'desktop')
+    }, 6000)
     return () => window.clearInterval(id)
-  }, [isSyncDriver, isReady, driftIntervalMs, driftThreshold])
+  }, [isSyncDriver, isReady, isCoarse])
 
   useEffect(() => {
-    if (!isSyncDriver) return
+    if (!isSyncDriver || isCoarse) return
     const id = window.setInterval(() => {
       const player = playerRef.current
       const state = stateRef.current
@@ -333,9 +402,9 @@ export function useYouTubePlayer({
       if (Date.now() < ignoreLocalUntil.current) return
       if (player.getPlayerState() !== YT.PlayerState.PLAYING) return
       callbacksRef.current.onSeek(player.getCurrentTime())
-    }, 10000)
+    }, 12000)
     return () => window.clearInterval(id)
-  }, [isSyncDriver, isReady])
+  }, [isSyncDriver, isReady, isCoarse])
 
   const handleSeek = useCallback((time: number) => {
     if (!canSendRef.current) return
@@ -343,6 +412,7 @@ export function useYouTubePlayer({
   }, [])
 
   const toggleMute = useCallback(() => {
+    userActivatedRef.current = true
     setMuted((prev) => {
       const next = !prev
       const player = playerRef.current
@@ -355,6 +425,7 @@ export function useYouTubePlayer({
   }, [])
 
   const changeVolume = useCallback((value: number) => {
+    userActivatedRef.current = true
     const vol = Math.max(0, Math.min(100, Math.round(value)))
     setVolume(vol)
     const player = playerRef.current
@@ -374,15 +445,18 @@ export function useYouTubePlayer({
   const play = useCallback(() => {
     const player = playerRef.current
     if (!player || !canSendRef.current) return
+    userActivatedRef.current = true
     silenceLocal(600)
     const t = player.getCurrentTime()
     player.playVideo()
     callbacksRef.current.onPlay(t)
+    setNeedsGesture(false)
   }, [])
 
   const pause = useCallback(() => {
     const player = playerRef.current
     if (!player || !canSendRef.current) return
+    userActivatedRef.current = true
     silenceLocal(600)
     const t = player.getCurrentTime()
     player.pauseVideo()
@@ -392,6 +466,7 @@ export function useYouTubePlayer({
   const seekBy = useCallback((delta: number) => {
     const player = playerRef.current
     if (!player || !canSendRef.current) return
+    userActivatedRef.current = true
     silenceLocal(600)
     const t = Math.max(0, player.getCurrentTime() + delta)
     player.seekTo(t, true)
@@ -401,6 +476,7 @@ export function useYouTubePlayer({
   const seekTo = useCallback((time: number) => {
     const player = playerRef.current
     if (!player || !canSendRef.current) return
+    userActivatedRef.current = true
     silenceLocal(600)
     const duration = player.getDuration()
     const t =
@@ -428,7 +504,7 @@ export function useYouTubePlayer({
         current = state.currentTime
       }
 
-      const rounded = Math.floor(current * 2) / 2
+      const rounded = Math.floor(current)
       setPlayback((prev) =>
         prev.current === rounded && prev.duration === duration
           ? prev
@@ -440,6 +516,8 @@ export function useYouTubePlayer({
 
   return {
     isReady,
+    needsGesture,
+    activatePlayback,
     handleSeek,
     playerRef,
     muted,

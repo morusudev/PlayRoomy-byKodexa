@@ -175,6 +175,8 @@ export function WatchTheater({
 
   const {
     isReady,
+    needsGesture,
+    activatePlayback,
     muted,
     volume,
     toggleMute,
@@ -437,6 +439,7 @@ export function WatchTheater({
     setTouchGrace(true)
     if (touchGraceTimerRef.current) clearTimeout(touchGraceTimerRef.current)
     revealControls()
+    if (needsGesture) activatePlayback()
   }
 
   const handleVideoTouchEnd = () => {
@@ -449,6 +452,7 @@ export function WatchTheater({
   const handleVideoTap = () => {
     if (!isCoarse || !hasVideo) return
     revealControls()
+    if (needsGesture) activatePlayback()
   }
 
   const overlayBtn = cn('theater-dock-btn', isCoarse && 'theater-dock-btn-coarse')
@@ -827,9 +831,27 @@ export function WatchTheater({
 
           <div
             ref={stageRef}
-            className="absolute inset-0 z-0 overflow-hidden flex items-center justify-center pointer-events-none"
+            className="theater-yt-stage absolute inset-0 z-0 overflow-hidden flex items-center justify-center pointer-events-none"
             style={{ opacity: isReady ? 1 : 0, transition: 'opacity 0.35s ease' }}
           />
+
+          {hasVideo && needsGesture && isCoarse && (
+            <button
+              type="button"
+              className="absolute inset-0 z-[14] flex flex-col items-center justify-center gap-3 bg-black/55 touch-manipulation"
+              onClick={(e) => {
+                e.stopPropagation()
+                activatePlayback()
+              }}
+            >
+              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-accent text-black shadow-lg">
+                <Play className="w-8 h-8 fill-current ml-1" />
+              </span>
+              <span className="text-sm font-semibold text-white px-4 text-center">
+                Toque para sincronizar o vídeo
+              </span>
+            </button>
+          )}
 
           {hasVideo && !isReady && (
             <div className="absolute inset-0 z-[12] flex flex-col items-center justify-center gap-3 bg-black/85 pointer-events-none">
