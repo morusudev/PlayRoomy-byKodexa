@@ -92,6 +92,7 @@ export function validatePlayerActionRole(
     case 'SEEK':
       return canControlPlayer(participant, controllerId, ownerId)
     case 'VIDEO_CHANGE':
+    case 'VIDEO_STOP':
     case 'VIDEO_ENDED':
       return canChangeVideo(participant, ownerId) || canControlPlayer(participant, controllerId, ownerId)
     default:

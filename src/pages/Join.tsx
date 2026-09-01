@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { PlayRoomyLogo } from '../components/brand/PlayRoomyLogo'
 import { isValidRoomId } from '../utils/roomId'
+import { NotFoundPage } from './NotFound'
 
 /**
  * Join entry from Home. Password (if any) is asked inside the room
@@ -21,13 +22,10 @@ export function JoinPage() {
 
   if (!roomId || !isValidRoomId(roomId)) {
     return (
-      <div className="min-h-dvh flex items-center justify-center px-6">
-        <div className="text-center">
-          <h1 className="text-xl font-semibold mb-2">Sala inválida</h1>
-          <p className="text-text-secondary mb-4">O ID da sala não é válido.</p>
-          <Button onClick={() => navigate('/')}>Voltar</Button>
-        </div>
-      </div>
+      <NotFoundPage
+        title="Sala inválida"
+        message="O código da sala não existe ou está incorreto. Confira o link que você recebeu."
+      />
     )
   }
 

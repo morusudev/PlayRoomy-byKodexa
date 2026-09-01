@@ -1,22 +1,35 @@
 import { useEffect, useRef, useState } from 'react'
-import { Send } from 'lucide-react'
-import type { ChatMessage } from '../../types'
+import { Send, X, Pin, PinOff } from 'lucide-react'
+import type { ChatMessage, ReactionKind } from '../../types'
+import { ReactionBar } from './ReactionBar'
 import { cn } from '../../lib/cn'
 
 interface ChatOverlayProps {
   messages: ChatMessage[]
   onSend: (text: string) => void
+  onReact?: (kind: ReactionKind) => void
+  reactionsEnabled?: boolean
   localUserId?: string
   variant?: 'panel' | 'overlay'
   className?: string
+  onClose?: () => void
+  showFullscreenPref?: boolean
+  fullscreenChatPref?: boolean
+  onToggleFullscreenChatPref?: () => void
 }
 
 export function ChatOverlay({
   messages,
   onSend,
+  onReact,
+  reactionsEnabled = true,
   localUserId,
   variant = 'panel',
   className,
+  onClose,
+  showFullscreenPref,
+  fullscreenChatPref,
+  onToggleFullscreenChatPref,
 }: ChatOverlayProps) {
   const [text, setText] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -46,7 +59,7 @@ export function ChatOverlay({
         className,
       )}
     >
-      <div className="shrink-0 px-3 py-2 border-b border-border-subtle/50">
+      <div className="shrink-0 px-3 py-2 border-b border-border-subtle/50 flex items-center justify-between gap-2">
         <p
           className={cn(
             'text-[10px] font-bold uppercase tracking-widest',
@@ -55,6 +68,54 @@ export function ChatOverlay({
         >
           Chat
         </p>
+        {(onClose || showFullscreenPref) && (
+          <div className="flex items-center gap-0.5">
+            {showFullscreenPref && onToggleFullscreenChatPref ? (
+              <button
+                type="button"
+                onClick={onToggleFullscreenChatPref}
+                className={cn(
+                  'h-7 w-7 rounded-md flex items-center justify-center transition-colors',
+                  isOverlay
+                    ? 'text-white/70 hover:text-white hover:bg-white/10'
+                    : 'text-text-muted hover:text-text-primary hover:bg-surface-3',
+                  fullscreenChatPref && 'text-accent',
+                )}
+                title={
+                  fullscreenChatPref
+                    ? 'Desativar chat automático em tela cheia'
+                    : 'Ativar chat automático em tela cheia'
+                }
+                aria-label={
+                  fullscreenChatPref
+                    ? 'Desativar chat automático em tela cheia'
+                    : 'Ativar chat automático em tela cheia'
+                }
+              >
+                {fullscreenChatPref ? (
+                  <Pin className="w-3.5 h-3.5" />
+                ) : (
+                  <PinOff className="w-3.5 h-3.5" />
+                )}
+              </button>
+            ) : null}
+            {onClose ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className={cn(
+                  'h-7 w-7 rounded-md flex items-center justify-center transition-colors',
+                  isOverlay
+                    ? 'text-white/70 hover:text-white hover:bg-white/10'
+                    : 'text-text-muted hover:text-text-primary hover:bg-surface-3',
+                )}
+                aria-label="Fechar chat"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            ) : null}
+          </div>
+        )}
       </div>
 
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-2">
@@ -92,10 +153,18 @@ export function ChatOverlay({
       <form
         onSubmit={handleSubmit}
         className={cn(
-          'shrink-0 p-2 border-t',
+          'shrink-0 p-2 border-t space-y-2',
           isOverlay ? 'border-white/10' : 'border-border-subtle',
         )}
       >
+        {onReact ? (
+          <ReactionBar
+            compact
+            disabled={!reactionsEnabled}
+            onReact={onReact}
+            className="justify-start px-0.5"
+          />
+        ) : null}
         <div
           className={cn(
             'flex gap-2 rounded-lg p-1',

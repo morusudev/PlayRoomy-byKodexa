@@ -13,10 +13,6 @@ import {
 } from '../services/youtube/player'
 import type { PlayerState } from '../types'
 import { getExpectedTime, shouldCorrectDrift } from '../utils/sync'
-import {
-  PREFERRED_QUALITY_KEY,
-  sortQualityLevels,
-} from '../utils/youtubeQuality'
 
 interface UseYouTubePlayerOptions {
   stageRef: RefObject<HTMLDivElement | null>
@@ -44,6 +40,7 @@ function applyIframeSize(player: YtPlayer, width: number, height: number) {
     iframe.style.display = 'block'
     iframe.style.position = 'absolute'
     iframe.style.inset = '0'
+    iframe.style.transform = 'none'
   } catch {
     // ignore
   }
@@ -58,7 +55,6 @@ function applyRemotePlayback(
   player.setVolume(audio.volume)
 
   if (state.playing) {
-    // Browsers often block unmuted autoplay — mute briefly, then restore preference
     player.mute()
     player.seekTo(expected, true)
     player.playVideo()
@@ -75,52 +71,6 @@ function applyRemotePlayback(
   }
 }
 
-function readStoredQuality(): string | null {
-  try {
-    return localStorage.getItem(PREFERRED_QUALITY_KEY)
-  } catch {
-    return null
-  }
-}
-
-function storeQuality(quality: string) {
-  try {
-    localStorage.setItem(PREFERRED_QUALITY_KEY, quality)
-  } catch {
-    // ignore
-  }
-}
-
-function readPlayerQualities(player: YtPlayer): string[] {
-  try {
-    const levels = player.getAvailableQualityLevels()
-    if (!levels.length) return []
-    const sorted = sortQualityLevels(levels)
-    return sorted.includes('auto') ? sorted : ['auto', ...sorted]
-  } catch {
-    return []
-  }
-}
-
-function applyPreferredQuality(player: YtPlayer, levels: string[]) {
-  if (!levels.length) return
-  const preferred = readStoredQuality()
-  const current = player.getPlaybackQuality()
-  const target =
-    preferred && levels.includes(preferred)
-      ? preferred
-      : levels.includes('auto')
-        ? 'auto'
-        : levels[0]
-  if (target && target !== current) {
-    try {
-      player.setPlaybackQuality(target)
-    } catch {
-      // ignore
-    }
-  }
-}
-
 export function useYouTubePlayer({
   stageRef,
   size,
@@ -133,11 +83,10 @@ export function useYouTubePlayer({
   onError,
 }: UseYouTubePlayerOptions) {
   const playerRef = useRef<YtPlayer | null>(null)
+  const mountRef = useRef<HTMLDivElement | null>(null)
   const [isReady, setIsReady] = useState(false)
   const [muted, setMuted] = useState(false)
   const [volume, setVolume] = useState(80)
-  const [qualities, setQualities] = useState<string[]>([])
-  const [quality, setQuality] = useState('auto')
 
   const ignoreLocalUntil = useRef(0)
   const loadedVideoId = useRef<string | null>(null)
@@ -161,7 +110,6 @@ export function useYouTubePlayer({
     ignoreLocalUntil.current = Date.now() + ms
   }
 
-  // Create player once we have a real layout size
   useEffect(() => {
     const readyToMount = size.width >= 160 && size.height >= 90
     if (!readyToMount) return
@@ -175,8 +123,11 @@ export function useYouTubePlayer({
 
     stage.innerHTML = ''
     const mount = document.createElement('div')
+    mountRef.current = mount
     mount.style.width = `${size.width}px`
     mount.style.height = `${size.height}px`
+    mount.style.position = 'absolute'
+    mount.style.inset = '0'
     stage.appendChild(mount)
 
     const host = window.location.hostname
@@ -224,7 +175,6 @@ export function useYouTubePlayer({
               clearTimeout(pauseTimer.current)
               pauseTimer.current = null
             }
-            // Already playing on server — heartbeat publishes position; avoid SEEK spam
             if (remote?.playing) return
             callbacksRef.current.onPlay(time)
             return
@@ -262,16 +212,6 @@ export function useYouTubePlayer({
       }
       playerRef.current = player
       applyIframeSize(player, sizeRef.current.width, sizeRef.current.height)
-      const levels = readPlayerQualities(player)
-      if (levels.length) {
-        setQualities(levels)
-        applyPreferredQuality(player, levels)
-        try {
-          setQuality(player.getPlaybackQuality() || 'auto')
-        } catch {
-          setQuality('auto')
-        }
-      }
       setIsReady(true)
     })
 
@@ -280,13 +220,13 @@ export function useYouTubePlayer({
       if (pauseTimer.current) clearTimeout(pauseTimer.current)
       playerRef.current?.destroy()
       playerRef.current = null
+      mountRef.current = null
       created.current = false
       setIsReady(false)
       loadedVideoId.current = null
       lastRemoteKey.current = ''
       if (stageRef.current) stageRef.current.innerHTML = ''
     }
-    // Intentionally only when size becomes valid (boolean), not on every pixel change
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [size.width >= 160 && size.height >= 90])
 
@@ -297,7 +237,6 @@ export function useYouTubePlayer({
     applyIframeSize(player, size.width, size.height)
   }, [size.width, size.height, isReady])
 
-  // Keep local mute/volume applied on the YouTube player
   useEffect(() => {
     const player = playerRef.current
     if (!player || !isReady) return
@@ -306,16 +245,28 @@ export function useYouTubePlayer({
     else player.unMute()
   }, [muted, volume, isReady])
 
-  // Load / change video (everyone)
   useEffect(() => {
     const player = playerRef.current
     const state = playerState
     const videoId = state?.videoId ?? null
-    if (!player || !isReady || !state || !videoId) return
+    if (!player || !isReady || !state) return
+
+    if (!videoId) {
+      if (loadedVideoId.current) {
+        loadedVideoId.current = null
+        lastRemoteKey.current = ''
+        try {
+          player.stopVideo()
+        } catch {
+          // ignore
+        }
+      }
+      return
+    }
+
     if (videoId === loadedVideoId.current) return
 
     loadedVideoId.current = videoId
-    // Force follow-up sync after cue — do not stamp lastRemoteKey here
     lastRemoteKey.current = ''
 
     silenceLocal(3000)
@@ -335,20 +286,9 @@ export function useYouTubePlayer({
       silenceLocal(2000)
       applyRemotePlayback(playerRef.current, latest, audioRef.current)
       lastRemoteKey.current = `${latest.playing}:${latest.updatedAt}`
-      const levels = readPlayerQualities(playerRef.current)
-      if (levels.length) {
-        setQualities(levels)
-        applyPreferredQuality(playerRef.current, levels)
-        try {
-          setQuality(playerRef.current.getPlaybackQuality() || 'auto')
-        } catch {
-          setQuality('auto')
-        }
-      }
     }, 500)
   }, [playerState?.videoId, isReady])
 
-  // Viewers follow host play / pause / seek
   useEffect(() => {
     if (isAuthority) return
 
@@ -372,7 +312,6 @@ export function useYouTubePlayer({
     playerState?.currentTime,
   ])
 
-  // Drift correction for viewers
   useEffect(() => {
     if (isAuthority) return
     const id = window.setInterval(() => {
@@ -388,7 +327,6 @@ export function useYouTubePlayer({
     return () => window.clearInterval(id)
   }, [isAuthority, isReady])
 
-  // Host publishes current time while playing so joiners stay aligned
   useEffect(() => {
     if (!isAuthority) return
     const id = window.setInterval(() => {
@@ -407,7 +345,6 @@ export function useYouTubePlayer({
     callbacksRef.current.onSeek(time)
   }, [])
 
-  /** Local only — never sent to the room. */
   const toggleMute = useCallback(() => {
     setMuted((prev) => {
       const next = !prev
@@ -507,41 +444,6 @@ export function useYouTubePlayer({
     return () => window.clearInterval(id)
   }, [isReady])
 
-  useEffect(() => {
-    if (!isReady) return
-    const id = window.setInterval(() => {
-      const player = playerRef.current
-      if (!player || !loadedVideoId.current) return
-      const levels = readPlayerQualities(player)
-      if (!levels.length) return
-      setQualities((prev) => {
-        if (prev.length === levels.length && prev.every((q, i) => q === levels[i])) {
-          return prev
-        }
-        return levels
-      })
-      try {
-        const current = player.getPlaybackQuality() || 'auto'
-        setQuality((prev) => (prev === current ? prev : current))
-      } catch {
-        // ignore
-      }
-    }, 2000)
-    return () => window.clearInterval(id)
-  }, [isReady, playerState?.videoId])
-
-  const changeQuality = useCallback((nextQuality: string) => {
-    const player = playerRef.current
-    if (!player) return
-    try {
-      player.setPlaybackQuality(nextQuality)
-      setQuality(nextQuality)
-      storeQuality(nextQuality)
-    } catch {
-      // ignore
-    }
-  }, [])
-
   return {
     isReady,
     handleSeek,
@@ -555,8 +457,5 @@ export function useYouTubePlayer({
     seekBy,
     seekTo,
     playback,
-    qualities,
-    quality,
-    changeQuality,
   }
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { RoomManager, type RoomManagerState } from '../services/room/roomManager'
 import { useToastStore } from '../store/toastStore'
-import type { Role } from '../types'
+import type { Role, ReactionKind } from '../types'
 import { canControlPlayer } from '../utils/permissions'
 
 const initialState: RoomManagerState = {
@@ -9,6 +9,7 @@ const initialState: RoomManagerState = {
   roomState: null,
   localParticipant: null,
   chatMessages: [],
+  liveReactions: [],
   error: null,
   isKicked: false,
   peerCount: 0,
@@ -62,12 +63,20 @@ export function useRoom(roomId: string, nickname: string, password?: string) {
     managerRef.current?.sendPlayerAction({ type: 'VIDEO_ENDED' })
   }, [])
 
+  const stopVideo = useCallback(() => {
+    managerRef.current?.stopVideo()
+  }, [])
+
   const changeVideo = useCallback((videoId: string, title: string) => {
     managerRef.current?.changeVideo(videoId, title)
   }, [])
 
   const sendChat = useCallback((text: string) => {
     managerRef.current?.sendChat(text)
+  }, [])
+
+  const sendReaction = useCallback((kind: ReactionKind) => {
+    managerRef.current?.sendReaction(kind)
   }, [])
 
   const addToQueue = useCallback((videoId: string, title: string) => {
@@ -133,8 +142,10 @@ export function useRoom(roomId: string, nickname: string, password?: string) {
     sendPause,
     sendSeek,
     sendVideoEnded,
+    stopVideo,
     changeVideo,
     sendChat,
+    sendReaction,
     addToQueue,
     removeFromQueue,
     skipQueue,

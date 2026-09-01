@@ -34,6 +34,13 @@ export type SeoRoute = {
 }
 
 export function getSeoForPath(pathname: string): SeoRoute {
+  if (pathname === '/' || pathname === '') {
+    return {
+      title: HOME_TITLE,
+      description: seoDefaults.description,
+    }
+  }
+
   const roomMatch = pathname.match(/^\/room\/([^/]+)/)
   if (roomMatch?.[1]) {
     const roomId = roomMatch[1]
@@ -56,8 +63,9 @@ export function getSeoForPath(pathname: string): SeoRoute {
   }
 
   return {
-    title: HOME_TITLE,
-    description: seoDefaults.description,
+    title: '404 | PlayRoomy',
+    description: 'Página não encontrada no PlayRoomy.',
+    noindex: true,
   }
 }
 

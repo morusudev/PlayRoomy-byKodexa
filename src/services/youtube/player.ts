@@ -16,8 +16,17 @@ export interface YtPlayer {
   getCurrentTime(): number
   getDuration(): number
   getPlayerState(): YtPlayerState
-  loadVideoById(videoId: string, startSeconds?: number): void
+  loadVideoById(
+    videoId: string,
+    startSeconds?: number,
+  ): void
+  loadVideoById(options: {
+    videoId: string
+    startSeconds?: number
+    suggestedQuality?: string
+  }): void
   cueVideoById(videoId: string, startSeconds?: number): void
+  getVideoData(): { video_id: string; title?: string }
   setVolume(volume: number): void
   getVolume(): number
   mute(): void
@@ -26,6 +35,7 @@ export interface YtPlayer {
   getAvailableQualityLevels(): string[]
   getPlaybackQuality(): string
   setPlaybackQuality(quality: string): void
+  stopVideo(): void
   destroy(): void
   getIframe(): HTMLIFrameElement
 }
@@ -51,6 +61,7 @@ export interface YtPlayerOptions {
     onReady?: (event: YtPlayerEvent) => void
     onStateChange?: (event: YtOnStateChangeEvent) => void
     onError?: (event: YtOnErrorEvent) => void
+    onPlaybackQualityChange?: (event: YtPlayerEvent) => void
   }
 }
 

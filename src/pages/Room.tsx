@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react'
 import { useParams, useLocation, useNavigate } from 'react-router-dom'
 import { Check, Users, ArrowLeft, Link2, Globe, Wifi } from 'lucide-react'
+import { NotFoundPage } from './NotFound'
+import { BackendConnectionError } from '../components/errors/BackendConnectionError'
 import { useRoom } from '../hooks/useRoom'
 import { useInviteUrl } from '../hooks/useInviteUrl'
 import { WatchTheater } from '../components/room/WatchTheater'
@@ -61,12 +63,26 @@ export function RoomPage() {
 
   if (!roomId || !isValidRoomId(roomId)) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <h1 className="text-xl font-semibold">Sala não encontrada</h1>
-          <Button onClick={() => navigate('/')}>Voltar</Button>
-        </div>
-      </div>
+      <NotFoundPage
+        title="Sala inválida"
+        message="O código da sala não existe ou está incorreto. Confira o link que você recebeu."
+      />
+    )
+  }
+
+  const backendUnreachable =
+    !showNicknameModal &&
+    !room.needsPassword &&
+    (room.connectionStatus === 'error' ||
+      (room.connectionStatus === 'disconnected' && !!room.error))
+
+  if (backendUnreachable) {
+    return (
+      <BackendConnectionError
+        message={room.error}
+        onRetry={() => window.location.reload()}
+        onHome={() => navigate('/')}
+      />
     )
   }
 
@@ -172,7 +188,7 @@ export function RoomPage() {
       </Modal>
 
       <header className="shrink-0 border-b border-border-subtle bg-surface-1/90 backdrop-blur-md animate-fade-up">
-        <div className="room-shell flex items-center justify-between gap-2 sm:gap-3 h-14 sm:h-[3.75rem]">
+        <div className="flex items-center justify-between gap-2 sm:gap-3 h-14 px-3 sm:px-4">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               onClick={() => navigate('/')}
@@ -265,11 +281,12 @@ export function RoomPage() {
         </div>
       )}
 
-      <div className="flex-1 min-h-0 room-shell pb-2 sm:pb-3 pt-2 sm:pt-3 flex flex-col animate-fade-up animate-delay-1">
+      <div className="flex-1 min-h-0 w-full flex flex-col">
         <WatchTheater
           playerState={roomState?.player ?? null}
           isAuthority={room.canControl}
           chatMessages={room.chatMessages}
+          liveReactions={room.liveReactions}
           localUserId={local?.id}
           participants={roomState?.participants ?? []}
           ownerId={ownerId}
@@ -286,8 +303,10 @@ export function RoomPage() {
           onPause={room.sendPause}
           onSeek={room.sendSeek}
           onVideoEnded={room.sendVideoEnded}
+          onStopVideo={room.stopVideo}
           onError={(msg) => addToast(msg, 'error')}
           onSendChat={room.sendChat}
+          onSendReaction={room.sendReaction}
           onPlayNow={(id, title) => handleAddVideo(id, title, false)}
           onAddToQueue={(id, title) => handleAddVideo(id, title, true)}
           onRemoveFromQueue={room.removeFromQueue}

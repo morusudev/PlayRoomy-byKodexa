@@ -1,4 +1,4 @@
-import { createWriteStream } from 'node:fs'
+import { createWriteStream, existsSync, readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import archiver from 'archiver'
@@ -6,6 +6,7 @@ import archiver from 'archiver'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const backendDir = join(root, 'backend')
 const outZip = join(root, 'playroomy-discloud.zip')
+const envDiscloud = join(backendDir, '.env.discloud')
 
 function pack() {
   return new Promise((resolve, reject) => {
@@ -25,8 +26,21 @@ function pack() {
     archive.glob('**/*', {
       cwd: backendDir,
       dot: true,
-      ignore: ['node_modules/**'],
+      ignore: [
+        'node_modules/**',
+        '.env',
+        '.env.local',
+        '.env.*.local',
+        '.env.discloud',
+      ],
     })
+
+    if (existsSync(envDiscloud)) {
+      archive.append(readFileSync(envDiscloud, 'utf8'), { name: '.env' })
+      console.log('[pack] .env de produção incluído (ALLOWED_ORIGINS)')
+    } else {
+      console.warn('[pack] aviso: backend/.env.discloud não encontrado')
+    }
 
     archive.finalize()
   })

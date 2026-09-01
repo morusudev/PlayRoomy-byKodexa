@@ -11,7 +11,6 @@ export const THEATER_SHORTCUTS = [
   { keys: 'F', label: 'Tela cheia' },
   { keys: 'P', label: 'Playlist' },
   { keys: 'C', label: 'Chat no vídeo' },
-  { keys: 'Q', label: 'Qualidade' },
   { keys: '?', label: 'Atalhos' },
 ] as const
 
@@ -34,7 +33,6 @@ interface TheaterShortcutHandlers {
   onToggleFullscreen: () => void
   onTogglePlaylist: () => void
   onToggleChat: () => void
-  onToggleQuality: () => void
   onToggleHelp: () => void
   canDrive: boolean
   canGoPrevious: boolean
@@ -129,12 +127,6 @@ export function useTheaterShortcuts(handlers: TheaterShortcutHandlers) {
       if (key === 'c' || key === 'C') {
         event.preventDefault()
         h.onToggleChat()
-        return
-      }
-
-      if (key === 'q' || key === 'Q') {
-        event.preventDefault()
-        h.onToggleQuality()
         return
       }
 

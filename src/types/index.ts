@@ -39,6 +39,7 @@ export type PlayerEventType =
   | 'PAUSE'
   | 'SEEK'
   | 'VIDEO_CHANGE'
+  | 'VIDEO_STOP'
   | 'SYNC_REQUEST'
   | 'SYNC_RESPONSE'
   | 'VIDEO_ENDED'
@@ -58,6 +59,17 @@ export interface ChatMessage {
   userName: string
   text: string
   timestamp: number
+}
+
+export type ReactionKind = 'fire' | 'heart' | 'laugh' | 'clap'
+
+export interface RoomReaction {
+  id: string
+  userId: string
+  userName: string
+  kind: ReactionKind
+  at: number
+  x: number
 }
 
 export interface QueueItem {

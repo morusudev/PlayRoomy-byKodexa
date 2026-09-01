@@ -1,4 +1,4 @@
-import type { RoomState, ChatMessage, Role } from '../../types'
+import type { RoomState, ChatMessage, Role, RoomReaction } from '../../types'
 import { getWebSocketUrl } from '../../config'
 import { hashString } from '../../utils/storage'
 
@@ -13,6 +13,7 @@ export type ServerMessage =
   | { type: 'user_left'; id: string; state: RoomState }
   | { type: 'owner_migrated'; newOwnerId: string; previousOwnerId: string; state: RoomState }
   | { type: 'chat'; message: ChatMessage }
+  | { type: 'reaction'; reaction: RoomReaction }
   | { type: 'kicked' }
   | { type: 'pong'; at: number }
   | { type: 'error'; code: string; message: string }
@@ -77,7 +78,7 @@ export function connectRoomSocket(handlers: RoomConnectionHandlers): Promise<Roo
     })
 
     ws.addEventListener('error', () => {
-      handlers.onError?.('Falha na conexão WebSocket com o host.')
+      handlers.onError?.('Falha ao conectar com o servidor PlayRoomy.')
       if (!settled) {
         settled = true
         reject(new Error('Falha WebSocket'))
@@ -87,7 +88,7 @@ export function connectRoomSocket(handlers: RoomConnectionHandlers): Promise<Roo
     window.setTimeout(() => {
       if (!settled) {
         settled = true
-        reject(new Error('Timeout ao conectar no host'))
+        reject(new Error('Tempo esgotado ao conectar no servidor'))
         try {
           ws.close()
         } catch {

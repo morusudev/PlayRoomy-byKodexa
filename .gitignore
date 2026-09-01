@@ -15,6 +15,7 @@ dist-ssr
 # Segredos locais (sobrescrevem o .env do repositório)
 .env.local
 .env.*.local
+backend/.env
 
 .vercel
 

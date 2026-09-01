@@ -71,6 +71,7 @@ type Inbound =
     }
   | { type: 'queue_prev'; by: string }
   | { type: 'chat'; by: string; text: string }
+  | { type: 'reaction'; by: string; kind: string }
   | { type: 'queue_add'; by: string; videoId: string; title: string }
   | { type: 'queue_remove'; by: string; itemId: string }
   | { type: 'queue_skip'; by: string }
@@ -96,6 +97,7 @@ export const serverLimits = {
   maxPlayHistory: 20,
   emptyRoomGraceMs: Number(process.env.EMPTY_ROOM_GRACE_MS) || 90_000,
   chatCooldownMs: 700,
+  reactionCooldownMs: 450,
   statsIntervalMs: 60_000,
 } as const
 
@@ -208,6 +210,8 @@ export function attachRoomyWss(httpServer: RoomyHttpServer, options: AttachRoomy
   const sockets = new Map<string, ClientSocket>()
   const emptyTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const chatCooldown = new Map<string, number>()
+  const reactionCooldown = new Map<string, number>()
+  const validReactions = new Set(['fire', 'heart', 'laugh', 'clap'])
 
   function getStats(): RoomServerStats {
     return {
@@ -350,6 +354,9 @@ export function attachRoomyWss(httpServer: RoomyHttpServer, options: AttachRoomy
         return
       case 'chat':
         handleChat(client, msg)
+        return
+      case 'reaction':
+        handleReaction(client, msg)
         return
       case 'queue_add':
         handleQueueAdd(client, msg)
@@ -588,6 +595,18 @@ export function attachRoomyWss(httpServer: RoomyHttpServer, options: AttachRoomy
         }
         break
       }
+      case 'VIDEO_STOP': {
+        if (!canChangeVideo(actor, room) && !canControl(actor, room)) return
+        if (!room.player.videoId) return
+        player = {
+          videoId: null,
+          playing: false,
+          currentTime: 0,
+          updatedAt: now,
+        }
+        room.currentVideoTitle = null
+        break
+      }
       default:
         return
     }
@@ -618,6 +637,33 @@ export function attachRoomyWss(httpServer: RoomyHttpServer, options: AttachRoomy
         userName: actor.name,
         text,
         timestamp: now,
+      },
+    })
+  }
+
+  function handleReaction(client: ClientSocket, msg: Extract<Inbound, { type: 'reaction' }>) {
+    const room = requireRoom(client)
+    if (!room) return
+    const actor = findActor(room, msg.by)
+    if (!actor) return
+    const kind = msg.kind.trim()
+    if (!validReactions.has(kind)) return
+
+    const cooldownKey = `${room.roomId}:${actor.id}`
+    const lastReaction = reactionCooldown.get(cooldownKey) ?? 0
+    const now = Date.now()
+    if (now - lastReaction < serverLimits.reactionCooldownMs) return
+    reactionCooldown.set(cooldownKey, now)
+
+    broadcast(room, sockets, {
+      type: 'reaction',
+      reaction: {
+        id: crypto.randomUUID().slice(0, 10),
+        userId: actor.id,
+        userName: actor.name,
+        kind,
+        at: now,
+        x: 18 + Math.floor(Math.random() * 64),
       },
     })
   }

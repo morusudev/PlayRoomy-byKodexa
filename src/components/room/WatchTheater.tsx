@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import {
   Maximize,
   Minimize,
@@ -15,22 +15,29 @@ import {
   SkipBack,
   Rewind,
   FastForward,
-  Settings,
   Keyboard,
   X,
+  VideoOff,
+  Pin,
+  PinOff,
 } from 'lucide-react'
+import {
+  readFullscreenChatPref,
+  storeFullscreenChatPref,
+} from '../../constants/fullscreenChat'
 import { useYouTubePlayer } from '../../hooks/useYouTubePlayer'
 import { useAutoHideControls } from '../../hooks/useAutoHideControls'
 import { usePlayerFeedback } from '../../hooks/usePlayerFeedback'
 import { useTheaterShortcuts, THEATER_SHORTCUTS } from '../../hooks/useTheaterShortcuts'
 import { useCoarsePointer } from '../../hooks/useCoarsePointer'
-import type { ChatMessage, Participant, PlayerState, QueueItem, Role } from '../../types'
+import type { ChatMessage, Participant, PlayerState, QueueItem, Role, RoomReaction } from '../../types'
 import { ChatOverlay } from './ChatOverlay'
 import { PlaylistPanel } from './PlaylistPanel'
 import { ParticipantList } from './ParticipantList'
 import { PlayerActionFlash } from './PlayerActionFlash'
+import { ReactionBar } from './ReactionBar'
+import { ReactionBurst } from './ReactionBurst'
 import { cn } from '../../lib/cn'
-import { qualityLabel } from '../../utils/youtubeQuality'
 
 const SEEK_STEP_SEC = 15
 
@@ -49,6 +56,7 @@ interface WatchTheaterProps {
   playerState: PlayerState | null
   isAuthority: boolean
   chatMessages: ChatMessage[]
+  liveReactions: RoomReaction[]
   localUserId?: string
   participants: Participant[]
   ownerId: string
@@ -65,8 +73,10 @@ interface WatchTheaterProps {
   onPause: (time: number) => void
   onSeek: (time: number) => void
   onVideoEnded: () => void
+  onStopVideo: () => void
   onError: (message: string) => void
   onSendChat: (text: string) => void
+  onSendReaction: (kind: RoomReaction['kind']) => void
   onPlayNow: (videoId: string, title: string) => void
   onAddToQueue: (videoId: string, title: string) => void
   onRemoveFromQueue: (id: string) => void
@@ -83,6 +93,7 @@ export function WatchTheater({
   playerState,
   isAuthority,
   chatMessages,
+  liveReactions,
   localUserId,
   participants,
   ownerId,
@@ -99,8 +110,10 @@ export function WatchTheater({
   onPause,
   onSeek,
   onVideoEnded,
+  onStopVideo,
   onError,
   onSendChat,
+  onSendReaction,
   onPlayNow,
   onAddToQueue,
   onRemoveFromQueue,
@@ -123,18 +136,17 @@ export function WatchTheater({
     () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches,
   )
   const [showChatOnVideo, setShowChatOnVideo] = useState(false)
+  const [fullscreenChatPref, setFullscreenChatPref] = useState(readFullscreenChatPref)
   const [scrubbing, setScrubbing] = useState(false)
   const [scrubTime, setScrubTime] = useState(0)
-  const [showQualityMenu, setShowQualityMenu] = useState(false)
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false)
   const [touching, setTouching] = useState(false)
-  const qualityMenuRef = useRef<HTMLDivElement>(null)
   const zoneTapRef = useRef(0)
 
   const canDrive = isAuthority || isOwner || canChangeVideo
   const hasVideo = !!playerState?.videoId
   const isCoarse = useCoarsePointer()
-  const uiPinned = scrubbing || showQualityMenu || touching || showShortcutsHelp
+  const uiPinned = scrubbing || touching || showShortcutsHelp
   const { flashMessage, flashLarge, showFeedback } = usePlayerFeedback()
   const { controlsVisible, revealControls, hideControls } = useAutoHideControls(
     uiPinned,
@@ -157,9 +169,6 @@ export function WatchTheater({
     seekBy,
     seekTo,
     playback,
-    qualities,
-    quality,
-    changeQuality,
   } = useYouTubePlayer({
       stageRef,
       size: box,
@@ -267,12 +276,25 @@ export function WatchTheater({
   }, [showFeedback])
 
   const handleToggleChat = useCallback(() => {
-    if (isCoarse) {
+    if (isFullscreen) {
+      setShowChatOnVideo((open) => {
+        const next = !open
+        showFeedback(next ? 'Chat' : 'Fechar', {
+          toast: next ? 'Chat no vídeo' : 'Chat fechado',
+        })
+        return next
+      })
+      return
+    }
+
+    const isLarge = window.matchMedia('(min-width: 1024px)').matches
+    if (isLarge || isCoarse) {
       setShowSidebarChat((open) => {
         const next = !open
         showFeedback(next ? 'Chat' : 'Fechar', {
           toast: next ? 'Chat aberto' : 'Chat fechado',
         })
+        if (next) setShowChatOnVideo(false)
         return next
       })
       return
@@ -282,9 +304,26 @@ export function WatchTheater({
       showFeedback(next ? 'Chat' : 'Fechar', {
         toast: next ? 'Chat no vídeo' : 'Chat fechado',
       })
+      if (next) setShowSidebarChat(false)
       return next
     })
-  }, [isCoarse, showFeedback])
+  }, [isCoarse, isFullscreen, showFeedback])
+
+  const chatActive = isFullscreen ? showChatOnVideo : showChatOnVideo || showSidebarChat
+
+  const toggleFullscreenChatPref = useCallback(() => {
+    setFullscreenChatPref((prev) => {
+      const next = !prev
+      storeFullscreenChatPref(next)
+      showFeedback(next ? 'Chat em FS' : 'Chat FS off', {
+        toast: next
+          ? 'Chat abre automaticamente em tela cheia'
+          : 'Chat não abre mais automaticamente em tela cheia',
+      })
+      if (!next && isFullscreen) setShowChatOnVideo(false)
+      return next
+    })
+  }, [isFullscreen, showFeedback])
 
   const handleTogglePeople = useCallback(() => {
     setShowPeople((open) => {
@@ -297,27 +336,11 @@ export function WatchTheater({
     })
   }, [showFeedback])
 
-  const handleToggleQuality = useCallback(() => {
-    revealControls()
-    setShowQualityMenu((open) => {
-      const next = !open
-      showFeedback(next ? 'Qualidade' : 'Fechar', {
-        toast: next ? 'Menu de qualidade' : 'Menu fechado',
-      })
-      return next
-    })
-  }, [revealControls, showFeedback])
-
-  const handleQualitySelect = useCallback(
-    (level: string) => {
-      changeQuality(level)
-      setShowQualityMenu(false)
-      showFeedback(qualityLabel(level), {
-        toast: `Qualidade: ${qualityLabel(level)}`,
-      })
-    },
-    [changeQuality, showFeedback],
-  )
+  const handleStopVideo = useCallback(() => {
+    if (!hasVideo || !canChangeVideo) return
+    onStopVideo()
+    showFeedback('Removido', { toast: 'Vídeo removido da sala' })
+  }, [canChangeVideo, hasVideo, onStopVideo, showFeedback])
 
   useTheaterShortcuts({
     enabled: hasVideo,
@@ -332,7 +355,6 @@ export function WatchTheater({
     onToggleFullscreen: () => void handleToggleFullscreen(),
     onTogglePlaylist: handleTogglePlaylist,
     onToggleChat: handleToggleChat,
-    onToggleQuality: handleToggleQuality,
     onToggleHelp: () => setShowShortcutsHelp((v) => !v),
     canDrive,
     canGoPrevious,
@@ -366,21 +388,18 @@ export function WatchTheater({
   }, [isFullscreen, showPlaylist, showSidebarChat, showChatOnVideo])
 
   useEffect(() => {
-    const onFs = () => setIsFullscreen(!!document.fullscreenElement)
-    document.addEventListener('fullscreenchange', onFs)
-    return () => document.removeEventListener('fullscreenchange', onFs)
-  }, [])
-
-  useEffect(() => {
-    if (!showQualityMenu) return
-    const onPointerDown = (event: PointerEvent) => {
-      if (!qualityMenuRef.current?.contains(event.target as Node)) {
-        setShowQualityMenu(false)
+    const onFs = () => {
+      const fs = !!document.fullscreenElement
+      setIsFullscreen(fs)
+      if (fs) {
+        setShowSidebarChat(false)
+        if (fullscreenChatPref) setShowChatOnVideo(true)
+        else setShowChatOnVideo(false)
       }
     }
-    document.addEventListener('pointerdown', onPointerDown)
-    return () => document.removeEventListener('pointerdown', onPointerDown)
-  }, [showQualityMenu])
+    document.addEventListener('fullscreenchange', onFs)
+    return () => document.removeEventListener('fullscreenchange', onFs)
+  }, [fullscreenChatPref])
 
   const finishScrub = () => {
     if (!scrubbing) return
@@ -402,7 +421,11 @@ export function WatchTheater({
   }
 
   const overlayBtn =
-    'h-8 w-8 sm:h-9 sm:w-9 rounded-lg flex items-center justify-center text-white/90 hover:text-white hover:bg-white/15 active:bg-white/20 active:scale-95 hover:-translate-y-0.5 transition-all duration-200 shrink-0 touch-manipulation'
+    'theater-dock-btn'
+
+  const dockBtnActive = (active: boolean) => cn(overlayBtn, active && 'is-active')
+  const dockBtnAccent = (active: boolean) =>
+    cn(overlayBtn, active ? 'is-accent' : undefined)
 
   const playBtnClass = cn(
     'rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 font-bold shadow-md transition-all duration-200 active:scale-95 hover:-translate-y-0.5 touch-manipulation',
@@ -410,7 +433,7 @@ export function WatchTheater({
     hasVideo ? 'bg-accent text-black hover:bg-accent-hover hover:shadow-accent/30' : 'bg-white/10 text-white/40 cursor-not-allowed',
   )
 
-  const transportControls = canDrive ? (
+  const transportControlsInner = canDrive ? (
     <>
       <button
         type="button"
@@ -450,20 +473,45 @@ export function WatchTheater({
       >
         <SkipForward className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
       </button>
+      {canChangeVideo && (
+        <>
+          <div className="theater-dock-divider mx-0.5" aria-hidden />
+          <button
+            type="button"
+            onClick={handleStopVideo}
+            className={cn(overlayBtn, 'hover:text-red-300 hover:bg-red-500/20')}
+            title="Retirar vídeo"
+            aria-label="Retirar vídeo"
+          >
+            <VideoOff className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          </button>
+        </>
+      )}
     </>
   ) : (
     <span className="text-[10px] sm:text-[11px] text-white/60 px-1 shrink-0">Assistindo</span>
   )
 
-  const utilityControls = (
-    <>
+  const transportControls = (
+    <div className="theater-dock-group px-1.5 sm:px-2 py-1 gap-0.5 sm:gap-1 shadow-none bg-black/55">
+      {transportControlsInner}
+    </div>
+  )
+
+  const volumeControl = (
+    <div className="theater-dock-group flex-1 min-w-0 max-w-[9rem] sm:max-w-[11rem]">
       <button type="button" onClick={handleMuteToggle} className={overlayBtn} aria-label="Volume" title="Mutar">
-        {muted || volume === 0 ? <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+        {muted || volume === 0 ? (
+          <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+        ) : (
+          <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+        )}
       </button>
-      <div className="relative w-14 sm:w-24 h-8 flex items-center shrink-0 hidden sm:flex">
-        <div className="absolute inset-x-0 h-1 rounded-full bg-white/25 overflow-hidden">
-          <div className="h-full rounded-full bg-accent" style={{ width: `${displayVol}%` }} />
-        </div>
+      <div
+        className="theater-volume-track"
+        style={{ '--vol-pct': `${displayVol}%` } as CSSProperties}
+      >
+        <div className="theater-volume-fill" aria-hidden />
         <input
           type="range"
           min={0}
@@ -476,103 +524,97 @@ export function WatchTheater({
           aria-label="Volume local"
         />
       </div>
-      <div ref={qualityMenuRef} className="relative shrink-0">
-        <button
-          type="button"
-          onClick={handleToggleQuality}
-          className={cn(overlayBtn, 'sm:gap-1 sm:px-2 sm:w-auto sm:min-w-9', showQualityMenu && 'bg-white/15')}
-          title="Qualidade"
-          aria-label="Qualidade"
-        >
-          <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          <span className="hidden sm:inline text-[10px] font-semibold tabular-nums">{qualityLabel(quality)}</span>
-        </button>
-        {showQualityMenu && (
-          <div
-            className={cn(
-              'rounded-lg border border-white/15 bg-black/95 py-1 shadow-xl backdrop-blur-sm',
-              isCoarse
-                ? 'fixed inset-x-2 bottom-[max(3.25rem,env(safe-area-inset-bottom))] z-[60] max-h-[40vh] overflow-y-auto'
-                : 'absolute bottom-full right-0 mb-2 min-w-[9rem]',
-            )}
-          >
-            {qualities.length === 0 ? (
-              <p className="px-3 py-2 text-[11px] text-white/60">Carregando...</p>
-            ) : (
-              qualities.map((level) => (
-                <button
-                  key={level}
-                  type="button"
-                  onClick={() => handleQualitySelect(level)}
-                  className={cn(
-                    'w-full px-3 py-2 text-left text-xs hover:bg-white/10 transition-colors touch-manipulation',
-                    level === quality ? 'text-accent font-semibold' : 'text-white/90',
-                  )}
-                >
-                  {qualityLabel(level)}
-                </button>
-              ))
-            )}
-          </div>
-        )}
-      </div>
+    </div>
+  )
+
+  const socialControls = (
+    <div className="theater-dock-group shrink-0">
       <button
         type="button"
         onClick={handleToggleChat}
-        className={cn(overlayBtn, (showChatOnVideo || (isCoarse && showSidebarChat)) && 'bg-accent/25 text-accent')}
+        className={dockBtnActive(chatActive)}
         title="Chat"
+        aria-label="Chat"
       >
-        {showChatOnVideo || (isCoarse && showSidebarChat) ? (
+        {chatActive ? (
           <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
         ) : (
           <MessageSquareOff className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
         )}
       </button>
+      {isFullscreen ? (
+        <button
+          type="button"
+          onClick={toggleFullscreenChatPref}
+          className={dockBtnActive(fullscreenChatPref)}
+          title={
+            fullscreenChatPref
+              ? 'Desativar chat automático em tela cheia'
+              : 'Ativar chat automático em tela cheia'
+          }
+          aria-label={
+            fullscreenChatPref
+              ? 'Desativar chat automático em tela cheia'
+              : 'Ativar chat automático em tela cheia'
+          }
+        >
+          {fullscreenChatPref ? (
+            <Pin className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          ) : (
+            <PinOff className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          )}
+        </button>
+      ) : null}
       <button
         type="button"
-        onClick={() => setShowSidebarChat((v) => !v)}
-        className={cn('hidden lg:flex', overlayBtn, showSidebarChat && 'bg-white/15')}
-        title="Painel de chat"
+        onClick={handleTogglePeople}
+        className={dockBtnActive(showPeople)}
+        aria-label="Participantes"
+        title="Participantes"
       >
-        <MessageSquare className="w-4 h-4" />
+        <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+        {participants.length > 1 && (
+          <span className="sr-only">{participants.length} participantes</span>
+        )}
       </button>
+    </div>
+  )
+
+  const roomControls = (
+    <div className="theater-dock-group shrink-0">
       <button
         type="button"
         onClick={handleTogglePlaylist}
-        className={cn(
-          overlayBtn,
-          'relative sm:h-9 sm:w-auto sm:px-3 sm:gap-1.5 sm:text-xs sm:font-semibold',
-          showPlaylist ? 'bg-accent text-black' : 'bg-white/10 text-white/90 hover:bg-white/20 sm:bg-transparent sm:hover:bg-white/15',
-        )}
+        className={cn(dockBtnAccent(showPlaylist), 'relative sm:w-auto sm:px-2.5 sm:gap-1.5')}
         title="Playlist"
+        aria-label="Playlist"
       >
         <ListMusic className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-        <span className="hidden sm:inline">
-          Playlist{queue.length > 0 ? ` (${queue.length})` : ''}
+        <span className="hidden sm:inline text-[11px] font-semibold">
+          {queue.length > 0 ? queue.length : ''}
         </span>
-        {isCoarse && queue.length > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-accent text-[8px] font-bold text-black flex items-center justify-center">
+        {queue.length > 0 && (
+          <span className="sm:hidden absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-accent text-[8px] font-bold text-black flex items-center justify-center">
             {queue.length}
           </span>
         )}
       </button>
-      <button
-        type="button"
-        onClick={handleTogglePeople}
-        className={cn(overlayBtn, showPeople && 'bg-white/15')}
-        aria-label="Pessoas"
-      >
-        <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-      </button>
-      <button
-        type="button"
-        onClick={() => setShowShortcutsHelp((v) => !v)}
-        className={cn(overlayBtn, showShortcutsHelp && 'bg-white/15')}
-        title={isCoarse ? 'Dicas' : 'Atalhos'}
-        aria-label={isCoarse ? 'Dicas de uso' : 'Atalhos de teclado'}
-      >
-        <Keyboard className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-      </button>
+    </div>
+  )
+
+  const settingsControls = (
+    <div className="theater-dock-group shrink-0 relative">
+      {!isCoarse ? (
+        <button
+          type="button"
+          onClick={() => setShowShortcutsHelp((v) => !v)}
+          className={dockBtnActive(showShortcutsHelp)}
+          title="Atalhos"
+          aria-label="Atalhos de teclado"
+        >
+          <Keyboard className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+        </button>
+      ) : null}
       <button
         type="button"
         onClick={() => void handleToggleFullscreen()}
@@ -580,26 +622,50 @@ export function WatchTheater({
         aria-label="Tela cheia"
         title="Tela cheia"
       >
-        {isFullscreen ? <Minimize className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Maximize className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+        {isFullscreen ? (
+          <Minimize className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+        ) : (
+          <Maximize className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+        )}
       </button>
-    </>
+    </div>
+  )
+
+  const reactionDock = (
+    <div className="theater-dock-group shrink-0">
+      <ReactionBar
+        embedded
+        compact={isCoarse}
+        disabled={!connected}
+        onReact={onSendReaction}
+      />
+    </div>
+  )
+
+  const utilityDock = (
+    <div className="theater-dock flex-1 min-w-0 justify-end overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {volumeControl}
+      <div className="theater-dock-divider hidden sm:block" aria-hidden />
+      {socialControls}
+      {roomControls}
+      {settingsControls}
+    </div>
   )
 
   return (
     <div
       ref={theaterRef}
       className={cn(
-        'w-full h-full min-h-0 flex flex-col lg:flex-row overflow-hidden',
-        'rounded-lg sm:rounded-xl lg:rounded-2xl border border-border-subtle bg-surface-1',
-        isFullscreen && 'rounded-none',
+        'w-full h-full min-h-0 flex flex-col lg:flex-row overflow-hidden bg-surface-0',
+        isFullscreen ? 'rounded-none' : 'lg:rounded-2xl lg:border lg:border-border-subtle lg:bg-surface-1',
       )}
     >
       <div className="relative flex flex-col min-h-0 flex-1 lg:min-w-0">
         <div
           ref={videoHostRef}
           className={cn(
-            'relative w-full bg-black overflow-hidden isolate touch-manipulation',
-            'aspect-video lg:aspect-auto lg:flex-1 lg:min-h-[240px]',
+            'group/video relative w-full bg-black overflow-hidden isolate touch-manipulation',
+            'flex-1 min-h-0 max-lg:min-h-[48dvh] lg:min-h-[240px]',
           )}
           onMouseMove={hasVideo ? revealControls : undefined}
           onMouseEnter={hasVideo ? revealControls : undefined}
@@ -622,24 +688,28 @@ export function WatchTheater({
           }
         >
           {!hasVideo && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 px-6 animate-fade-in">
-              <div className="relative">
-                <span className="absolute inset-0 rounded-full bg-accent/20 animate-play-ring" />
-                <Radio className="relative w-10 h-10 text-white/30 animate-float" />
+            <div className="absolute inset-0 z-10 flex flex-col animate-fade-in">
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 pt-6 sm:pt-10">
+                <div className="relative">
+                  <span className="absolute inset-0 rounded-full bg-accent/20 animate-play-ring" />
+                  <Radio className="relative w-10 h-10 text-white/30 animate-float" />
+                </div>
+                <p className="text-sm sm:text-base text-white/55 text-center">Aguardando um vídeo</p>
               </div>
-              <p className="text-sm sm:text-base text-white/55 text-center">Aguardando um vídeo</p>
               {canDrive && connected && (
-                <button
-                  type="button"
-                  onClick={() => setShowPlaylist(true)}
-                  className="interactive-card mt-1 inline-flex items-center gap-3 sm:gap-4 px-5 sm:px-7 py-3.5 sm:py-4 rounded-2xl bg-accent/12 border border-accent/35 text-accent font-bold text-base sm:text-lg hover:bg-accent hover:text-black animate-fade-up animate-delay-2 group"
-                  aria-label="Abrir playlist"
-                >
-                  <span className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-xl bg-accent/20 group-hover:bg-black/10 transition-colors">
-                    <ListMusic className="w-6 h-6 sm:w-7 sm:h-7" />
-                  </span>
-                  <span>Abrir playlist</span>
-                </button>
+                <div className="shrink-0 px-6 pb-8 sm:pb-10 pt-2 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => setShowPlaylist(true)}
+                    className="interactive-card inline-flex items-center gap-3 px-5 py-3 sm:px-6 sm:py-3.5 rounded-2xl bg-accent/12 border border-accent/35 text-accent font-bold text-sm sm:text-base hover:bg-accent hover:text-black group"
+                    aria-label="Abrir playlist"
+                  >
+                    <span className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-xl bg-accent/20 group-hover:bg-black/10 transition-colors">
+                      <ListMusic className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </span>
+                    <span>Abrir playlist</span>
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -672,26 +742,44 @@ export function WatchTheater({
           )}
 
           <PlayerActionFlash message={flashMessage} large={flashLarge} />
+          <ReactionBurst reactions={liveReactions} />
 
-          {canDrive && hasVideo && !isPlaying && !isCoarse && (
-            <button
-              type="button"
-              onClick={handlePlayPause}
-              className={cn(
-                'absolute z-[15] left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-14 w-14 sm:h-16 sm:w-16 rounded-full bg-accent text-black flex items-center justify-center shadow-xl hover:scale-105 transition-transform pointer-events-auto',
-                chromeClass,
-              )}
-              aria-label="Play"
-            >
-              <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-current ml-1" />
-            </button>
+          {canDrive && hasVideo && (
+            <div className="absolute inset-0 z-[15] flex items-center justify-center pointer-events-none">
+              <button
+                type="button"
+                onClick={handlePlayPause}
+                className={cn(
+                  'h-14 w-14 sm:h-[4.25rem] sm:w-[4.25rem] rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 touch-manipulation',
+                  'bg-black/55 backdrop-blur-md border border-white/25 text-white',
+                  'hover:bg-accent hover:text-black hover:border-accent hover:scale-105',
+                  isCoarse
+                    ? controlsVisible
+                      ? 'opacity-100 scale-100 pointer-events-auto'
+                      : 'opacity-0 scale-90 pointer-events-none'
+                    : cn(
+                        'opacity-0 scale-90 pointer-events-none',
+                        'group-hover/video:opacity-100 group-hover/video:scale-100 group-hover/video:pointer-events-auto',
+                        controlsVisible && 'opacity-100 scale-100 pointer-events-auto',
+                      ),
+                )}
+                aria-label={isPlaying ? 'Pausar' : 'Play'}
+                title={isPlaying ? 'Pausar' : 'Play'}
+              >
+                {isPlaying ? (
+                  <Pause className="w-7 h-7 sm:w-8 sm:h-8" strokeWidth={2.5} />
+                ) : (
+                  <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-current ml-1" />
+                )}
+              </button>
+            </div>
           )}
 
           {hasVideo && (
             <div className={cn('absolute inset-x-0 bottom-0 z-[50] pointer-events-none', chromeClass)}>
               <div
                 className={cn(
-                  'bg-gradient-to-t from-black/95 via-black/70 to-transparent pt-2 sm:pt-14 pb-[max(0.25rem,env(safe-area-inset-bottom))] sm:pb-3 px-1.5 sm:px-3',
+                  'bg-gradient-to-t from-black/95 via-black/75 to-transparent pt-3 sm:pt-10 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:pb-3.5 px-2 sm:px-4',
                   controlsVisible ? 'pointer-events-auto' : 'pointer-events-none',
                 )}
               >
@@ -731,22 +819,13 @@ export function WatchTheater({
                   </div>
                 )}
 
-                {isCoarse ? (
-                  <div className="flex items-center gap-1 min-w-0">
-                    <div className="flex items-center gap-0.5 shrink-0">{transportControls}</div>
-                    <div className="h-4 w-px bg-white/15 shrink-0" />
-                    <div className="flex items-center gap-0.5 min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                      {utilityControls}
-                    </div>
+                <div className="flex flex-col gap-2.5 sm:gap-3 min-w-0">
+                  <div className="flex justify-center">{transportControls}</div>
+                  <div className="theater-dock min-w-0">
+                    {reactionDock}
+                    {utilityDock}
                   </div>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-center gap-2">{transportControls}</div>
-                    <div className="flex items-center gap-2">
-                      {utilityControls}
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
             </div>
           )}
@@ -820,13 +899,26 @@ export function WatchTheater({
           </div>
 
           {showChatOnVideo && (
-            <div className="absolute top-10 right-0 bottom-2 z-30 w-[min(92%,16rem)] sm:w-60 pointer-events-auto">
+            <div
+              className={cn(
+                'absolute z-[60] pointer-events-auto',
+                isFullscreen
+                  ? 'top-12 right-2 bottom-20 w-[min(92%,20rem)] sm:w-80'
+                  : 'top-10 right-0 bottom-2 w-[min(92%,16rem)] sm:w-60',
+              )}
+            >
               <ChatOverlay
                 messages={chatMessages}
                 onSend={onSendChat}
+                onReact={onSendReaction}
+                reactionsEnabled={connected}
                 localUserId={localUserId}
                 variant="overlay"
-                className="h-full rounded-lg overflow-hidden"
+                className="h-full rounded-xl overflow-hidden border border-white/10 shadow-2xl"
+                onClose={() => setShowChatOnVideo(false)}
+                showFullscreenPref={isFullscreen}
+                fullscreenChatPref={fullscreenChatPref}
+                onToggleFullscreenChatPref={toggleFullscreenChatPref}
               />
             </div>
           )}
@@ -872,10 +964,12 @@ export function WatchTheater({
         </div>
 
         {!isFullscreen && showSidebarChat && !showChatOnVideo && (
-          <div className="lg:hidden flex flex-col h-36 max-h-[30vh] shrink-0 border-t border-border-subtle bg-surface-1">
+          <div className="lg:hidden flex flex-col min-h-[9rem] max-h-[38dvh] flex-1 shrink-0 border-t border-border-subtle bg-surface-1">
             <ChatOverlay
               messages={chatMessages}
               onSend={onSendChat}
+              onReact={onSendReaction}
+              reactionsEnabled={connected}
               localUserId={localUserId}
               variant="panel"
             />
@@ -888,6 +982,8 @@ export function WatchTheater({
           <ChatOverlay
             messages={chatMessages}
             onSend={onSendChat}
+            onReact={onSendReaction}
+            reactionsEnabled={connected}
             localUserId={localUserId}
             variant="panel"
           />

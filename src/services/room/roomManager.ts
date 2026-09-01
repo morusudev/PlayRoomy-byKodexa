@@ -9,9 +9,12 @@ import type {
   Participant,
   PlayerAction,
   QueueItem,
+  ReactionKind,
   Role,
+  RoomReaction,
   RoomState,
 } from '../../types'
+import { REACTION_KINDS } from '../../constants/reactions'
 import { canControlPlayer } from '../../utils/permissions'
 import {
   loadIdentity,
@@ -21,6 +24,7 @@ import {
   saveRoomAuth,
   clearRoomCreateOptions,
 } from '../../utils/storage'
+import { getBackendConnectionErrorMessage } from '../../config'
 import { generateRoomId } from '../../utils/roomId'
 
 export interface RoomManagerCallbacks {
@@ -33,6 +37,7 @@ export interface RoomManagerState {
   roomState: RoomState | null
   localParticipant: Participant | null
   chatMessages: import('../../types').ChatMessage[]
+  liveReactions: RoomReaction[]
   error: string | null
   isKicked: boolean
   peerCount: number
@@ -50,12 +55,14 @@ export class RoomManager {
   private pingTimer: ReturnType<typeof setInterval> | null = null
   private joinRetryTimer: ReturnType<typeof setTimeout> | null = null
   private joinRetries = 0
+  private reactionTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private callbacks: RoomManagerCallbacks
   private state: RoomManagerState = {
     connectionStatus: 'idle',
     roomState: null,
     localParticipant: null,
     chatMessages: [],
+    liveReactions: [],
     error: null,
     isKicked: false,
     peerCount: 0,
@@ -105,7 +112,7 @@ export class RoomManager {
           if (this.disposed) return
           this.update({
             connectionStatus: 'disconnected',
-            error: 'Conexão perdida. Recarregue a página ou entre de novo na sala.',
+            error: 'Conexão perdida com o servidor. Verifique sua internet e tente de novo.',
             waitingForHost: false,
           })
         },
@@ -118,8 +125,7 @@ export class RoomManager {
     } catch {
       this.update({
         connectionStatus: 'error',
-        error:
-          'Não conectou no servidor do host. Abra https://IP:5173 no PC do host (npm run dev) e use o mesmo link.',
+        error: getBackendConnectionErrorMessage(),
       })
       return
     }
@@ -246,6 +252,10 @@ export class RoomManager {
         this.update({
           chatMessages: [...this.state.chatMessages, msg.message].slice(-100),
         })
+        break
+
+      case 'reaction':
+        this.pushReaction(msg.reaction)
         break
 
       case 'kicked':
@@ -386,9 +396,36 @@ export class RoomManager {
     this.socket.send({ type: 'chat', by: local.id, text: text.trim() })
   }
 
+  sendReaction(kind: ReactionKind) {
+    const local = this.state.localParticipant
+    if (!local || !this.socket || !REACTION_KINDS.has(kind)) return
+    this.socket.send({ type: 'reaction', by: local.id, kind })
+  }
+
+  private pushReaction(reaction: RoomReaction) {
+    const list = [...this.state.liveReactions, reaction].slice(-32)
+    this.update({ liveReactions: list })
+
+    const existing = this.reactionTimers.get(reaction.id)
+    if (existing) clearTimeout(existing)
+
+    const timer = setTimeout(() => {
+      this.reactionTimers.delete(reaction.id)
+      this.update({
+        liveReactions: this.state.liveReactions.filter((item) => item.id !== reaction.id),
+      })
+    }, 2400)
+    this.reactionTimers.set(reaction.id, timer)
+  }
+
   changeVideo(videoId: string, title: string) {
     this.sendPlayerAction({ type: 'VIDEO_CHANGE', videoId, title })
     this.callbacks.onToast('Vídeo sincronizado na sala', 'success')
+  }
+
+  stopVideo() {
+    this.sendPlayerAction({ type: 'VIDEO_STOP' })
+    this.callbacks.onToast('Vídeo removido da sala', 'success')
   }
 
   addToQueue(videoId: string, title: string) {
@@ -459,9 +496,13 @@ export class RoomManager {
     this.disposed = true
     if (this.pingTimer) clearInterval(this.pingTimer)
     if (this.joinRetryTimer) clearTimeout(this.joinRetryTimer)
+    for (const timer of this.reactionTimers.values()) {
+      clearTimeout(timer)
+    }
+    this.reactionTimers.clear()
     this.socket?.close()
     this.socket = null
-    this.update({ connectionStatus: 'disconnected', waitingForHost: false })
+    this.update({ connectionStatus: 'disconnected', waitingForHost: false, liveReactions: [] })
   }
 
   static async prepareRoom(

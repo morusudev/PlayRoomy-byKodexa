@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { HomePage } from './pages/Home'
 import { RoomPage } from './pages/Room'
 import { JoinPage } from './pages/Join'
+import { NotFoundPage } from './pages/NotFound'
 import { Toaster } from './components/ui/Toaster'
 import { SecureContextBanner } from './components/SecureContextBanner'
 import { PageSeo } from './components/seo/PageSeo'
@@ -24,6 +25,7 @@ function AppRoutes() {
           <Route path="/" element={<HomePage />} />
           <Route path="/room/:roomId" element={<RoomPage />} />
           <Route path="/join/:roomId" element={<JoinPage />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </div>
       <Toaster />

@@ -3,16 +3,19 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "tsx src/server.ts",
     "dev": "tsx watch src/server.ts"
   },
   "dependencies": {
+    "tsx": "^4.23.13",
     "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
-    "@types/ws": "^8.18.1",
-    "tsx": "^4.23.13"
+    "@types/ws": "^8.18.1"
   }
 }

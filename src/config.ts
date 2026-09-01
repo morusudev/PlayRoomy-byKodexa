@@ -35,3 +35,25 @@ export function getInviteBaseUrl(): string {
   if (appConfig.publicUrl) return appConfig.publicUrl.replace(/\/$/, '')
   return window.location.origin
 }
+
+export function getBackendConnectionHint(): string {
+  if (appConfig.wsUrl) {
+    const host = appConfig.wsUrl.replace(/^wss?:\/\//, '').replace(/\/$/, '')
+    return `Backend configurado: ${host}`
+  }
+  if (import.meta.env.DEV) {
+    return 'Dev: rode o backend com cd backend && npm run dev (porta 8080)'
+  }
+  return 'Configure VITE_WS_URL no deploy do frontend (ex: wss://seu-id.discloud.app)'
+}
+
+export function getBackendConnectionErrorMessage(): string {
+  if (appConfig.wsUrl) {
+    const host = appConfig.wsUrl.replace(/^wss?:\/\//, '').replace(/\/$/, '')
+    return `Não conectou ao servidor em ${host}. Verifique se o backend está no ar na Discloud.`
+  }
+  if (import.meta.env.DEV) {
+    return 'Não conectou ao servidor local. Rode o backend na pasta backend (npm run dev).'
+  }
+  return 'Não conectou ao servidor. O backend PlayRoomy precisa estar online e VITE_WS_URL configurado.'
+}
