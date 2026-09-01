@@ -144,7 +144,6 @@ export function WatchTheater({
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false)
   const [touching, setTouching] = useState(false)
   const [touchGrace, setTouchGrace] = useState(false)
-  const zoneTapRef = useRef(0)
   const touchGraceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const localParticipant = useMemo(
@@ -159,7 +158,9 @@ export function WatchTheater({
   )
   const hasVideo = !!playerState?.videoId
   const isCoarse = useCoarsePointer()
-  const uiPinned = scrubbing || touching || touchGrace || showShortcutsHelp
+  const uiPinnedBase = scrubbing || touching || touchGrace || showShortcutsHelp
+  const mobileControlsPinned = isCoarse && hasVideo && !(playerState?.playing ?? false)
+  const uiPinned = uiPinnedBase || mobileControlsPinned
   const { isFullscreen, isImmersive, toggle: toggleFullscreen } = useTheaterFullscreen(theaterRef)
   const { flashMessage, flashLarge, showFeedback } = usePlayerFeedback()
   const { controlsVisible, revealControls, hideControls } = useAutoHideControls(
@@ -381,31 +382,32 @@ export function WatchTheater({
       const rect = host.getBoundingClientRect()
       const width = Math.max(0, Math.floor(rect.width))
       const height = Math.max(0, Math.floor(rect.height))
-      const minW = isCoarse ? 120 : 160
-      const minH = isCoarse ? 68 : 90
+      const minW = isCoarse ? 100 : 160
+      const minH = isCoarse ? 56 : 90
       if (width < minW || height < minH) return
       setBox((prev) =>
         prev.width === width && prev.height === height ? prev : { width, height },
       )
     }
 
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null
+    const scheduleUpdate = () => {
+      if (resizeTimer) clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(update, isCoarse ? 200 : 80)
+    }
+
     update()
-    const ro = new ResizeObserver(() => update())
+    const ro = new ResizeObserver(scheduleUpdate)
     ro.observe(host)
-    window.addEventListener('resize', update)
-    window.visualViewport?.addEventListener('resize', update)
-    window.visualViewport?.addEventListener('scroll', update)
-    window.addEventListener('orientationchange', update)
-    const t = window.setTimeout(update, 80)
-    const t2 = window.setTimeout(update, 320)
+    window.addEventListener('resize', scheduleUpdate)
+    window.visualViewport?.addEventListener('resize', scheduleUpdate)
+    window.addEventListener('orientationchange', scheduleUpdate)
     return () => {
+      if (resizeTimer) clearTimeout(resizeTimer)
       ro.disconnect()
-      window.removeEventListener('resize', update)
-      window.visualViewport?.removeEventListener('resize', update)
-      window.visualViewport?.removeEventListener('scroll', update)
-      window.removeEventListener('orientationchange', update)
-      window.clearTimeout(t)
-      window.clearTimeout(t2)
+      window.removeEventListener('resize', scheduleUpdate)
+      window.visualViewport?.removeEventListener('resize', scheduleUpdate)
+      window.removeEventListener('orientationchange', scheduleUpdate)
     }
   }, [isFullscreen, showPlaylist, showSidebarChat, showChatOnVideo, isCoarse])
 
@@ -446,18 +448,6 @@ export function WatchTheater({
 
   const handleVideoTap = () => {
     if (!isCoarse || !hasVideo) return
-    revealControls()
-  }
-
-  const handleZoneTap = (direction: 'back' | 'forward') => {
-    const now = Date.now()
-    if (now - zoneTapRef.current < 380) {
-      if (direction === 'back') handleSeekBack()
-      else handleSeekForward()
-      zoneTapRef.current = 0
-      return
-    }
-    zoneTapRef.current = now
     revealControls()
   }
 
@@ -684,6 +674,96 @@ export function WatchTheater({
     </div>
   )
 
+  const mobilePlayBtnClass = cn(
+    'rounded-full flex items-center justify-center shrink-0 font-bold shadow-lg transition-transform active:scale-95 touch-manipulation',
+    'h-14 w-14 bg-accent text-black',
+    !hasVideo && 'opacity-40 pointer-events-none',
+  )
+
+  const mobileProgressBar = duration > 0 && (
+    <div className="mb-2">
+      <div className="relative h-2.5 rounded-full bg-white/20">
+        <div
+          className="absolute inset-y-0 left-0 rounded-full bg-accent"
+          style={{ width: `${progressPct}%` }}
+        />
+        {canDrive ? (
+          <input
+            type="range"
+            min={0}
+            max={duration}
+            step={0.1}
+            value={currentTime}
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              setScrubbing(true)
+              setScrubTime(currentTime)
+            }}
+            onInput={(e) => setScrubTime(Number(e.currentTarget.value))}
+            onPointerUp={finishScrub}
+            onPointerCancel={finishScrub}
+            onBlur={finishScrub}
+            className="roomy-volume absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            aria-label="Posição do vídeo"
+          />
+        ) : null}
+      </div>
+      <div className="mt-1 flex justify-between text-[10px] text-white/65 tabular-nums">
+        <span>{formatTime(currentTime)}</span>
+        <span>{formatTime(duration)}</span>
+      </div>
+    </div>
+  )
+
+  const mobileControls = (
+    <div
+      className="bg-black/92 px-3 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {mobileProgressBar}
+      {canDrive ? (
+        <div className="flex items-center justify-center gap-3 mb-2.5">
+          <button type="button" onClick={handleSeekBack} className={overlayBtn} aria-label={`Voltar ${SEEK_STEP_SEC}s`}>
+            <Rewind className="w-5 h-5" />
+          </button>
+          <button
+            type="button"
+            onClick={handlePlayPause}
+            disabled={!hasVideo}
+            className={mobilePlayBtnClass}
+            aria-label={isPlaying ? 'Pausar' : 'Play'}
+          >
+            {isPlaying ? (
+              <Pause className="w-6 h-6" strokeWidth={2.5} />
+            ) : (
+              <Play className="w-6 h-6 fill-current ml-0.5" />
+            )}
+          </button>
+          <button type="button" onClick={handleSeekForward} className={overlayBtn} aria-label={`Avançar ${SEEK_STEP_SEC}s`}>
+            <FastForward className="w-5 h-5" />
+          </button>
+        </div>
+      ) : (
+        <p className="text-center text-xs text-white/60 mb-2.5">Sincronizado com a sala</p>
+      )}
+      <div className="flex items-center justify-between gap-1">
+        <button type="button" onClick={handleMuteToggle} className={overlayBtn} aria-label="Volume">
+          {muted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+        </button>
+        <button type="button" onClick={handleToggleChat} className={dockBtnActive(chatActive)} aria-label="Chat">
+          {chatActive ? <MessageSquare className="w-5 h-5" /> : <MessageSquareOff className="w-5 h-5" />}
+        </button>
+        {canDrive ? (
+          <button type="button" onClick={handleTogglePlaylist} className={dockBtnAccent(showPlaylist)} aria-label="Playlist">
+            <ListMusic className="w-5 h-5" />
+          </button>
+        ) : null}
+        <button type="button" onClick={() => void handleToggleFullscreen()} className={overlayBtn} aria-label="Tela cheia">
+          {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+        </button>
+      </div>
+    </div>
+  )
   const utilityDock = (
     <div className="theater-dock flex-1 min-w-0 justify-end overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {volumeControl}
@@ -708,7 +788,8 @@ export function WatchTheater({
           ref={videoHostRef}
           className={cn(
             'group/video relative w-full bg-black overflow-hidden isolate touch-manipulation',
-            'flex-1 min-h-0 max-lg:min-h-[52dvh] lg:min-h-[240px]',
+            'flex-1 min-h-0 max-lg:min-h-[58dvh] lg:min-h-[240px]',
+            isCoarse && 'theater-video-mobile',
           )}
           onMouseMove={hasVideo ? revealControls : undefined}
           onMouseEnter={hasVideo ? revealControls : undefined}
@@ -761,33 +842,10 @@ export function WatchTheater({
             <div className="absolute inset-0 z-[5] pointer-events-none" aria-hidden />
           )}
 
-          {hasVideo && isCoarse && canDrive && (
-            <>
-              <button
-                type="button"
-                className="absolute left-0 top-0 bottom-24 w-[34%] z-[8] touch-manipulation"
-                aria-label={`Voltar ${SEEK_STEP_SEC} segundos`}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleZoneTap('back')
-                }}
-              />
-              <button
-                type="button"
-                className="absolute right-0 top-0 bottom-24 w-[34%] z-[8] touch-manipulation"
-                aria-label={`Avançar ${SEEK_STEP_SEC} segundos`}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleZoneTap('forward')
-                }}
-              />
-            </>
-          )}
+          {!isCoarse ? <PlayerActionFlash message={flashMessage} large={flashLarge} /> : null}
+          {!isCoarse ? <ReactionBurst reactions={liveReactions} /> : null}
 
-          <PlayerActionFlash message={flashMessage} large={flashLarge} />
-          <ReactionBurst reactions={liveReactions} />
-
-          {canDrive && hasVideo && (
+          {canDrive && hasVideo && !isCoarse && (
             <div className="absolute inset-0 z-[15] flex items-center justify-center pointer-events-none">
               <button
                 type="button"
@@ -796,33 +854,34 @@ export function WatchTheater({
                   handlePlayPause()
                 }}
                 className={cn(
-                  'rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 touch-manipulation pointer-events-auto',
-                  isCoarse ? 'h-16 w-16' : 'h-14 w-14 sm:h-[4.25rem] sm:w-[4.25rem]',
+                  'h-14 w-14 sm:h-[4.25rem] sm:w-[4.25rem] rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 touch-manipulation pointer-events-auto',
                   'bg-black/60 backdrop-blur-md border border-white/25 text-white active:scale-95',
-                  isCoarse
-                    ? !isPlaying || controlsVisible
-                      ? 'opacity-100 scale-100'
-                      : 'opacity-0 scale-90 pointer-events-none'
-                    : cn(
-                        'opacity-0 scale-90 pointer-events-none',
-                        'group-hover/video:opacity-100 group-hover/video:scale-100 group-hover/video:pointer-events-auto',
-                        controlsVisible && 'opacity-100 scale-100 pointer-events-auto',
-                      ),
+                  'opacity-0 scale-90 pointer-events-none',
+                  'group-hover/video:opacity-100 group-hover/video:scale-100 group-hover/video:pointer-events-auto',
+                  controlsVisible && 'opacity-100 scale-100 pointer-events-auto',
                 )}
                 aria-label={isPlaying ? 'Pausar' : 'Play'}
                 title={isPlaying ? 'Pausar' : 'Play'}
               >
                 {isPlaying ? (
-                  <Pause className={cn(isCoarse ? 'w-8 h-8' : 'w-7 h-7 sm:w-8 sm:h-8')} strokeWidth={2.5} />
+                  <Pause className="w-7 h-7 sm:w-8 sm:h-8" strokeWidth={2.5} />
                 ) : (
-                  <Play className={cn(isCoarse ? 'w-8 h-8 ml-1' : 'w-7 h-7 sm:w-8 sm:h-8 ml-1')} fill="currentColor" />
+                  <Play className="w-7 h-7 sm:w-8 sm:h-8 ml-1 fill-current" />
                 )}
               </button>
             </div>
           )}
 
           {hasVideo && (
-            <div className={cn('absolute inset-x-0 bottom-0 z-[50] pointer-events-none', chromeClass)}>
+            <div
+              className={cn(
+                'absolute inset-x-0 bottom-0 z-[50]',
+                isCoarse ? 'pointer-events-auto' : cn('pointer-events-none', chromeClass),
+              )}
+            >
+              {isCoarse ? (
+                mobileControls
+              ) : (
               <div
                 className={cn(
                   'bg-gradient-to-t from-black/95 via-black/75 to-transparent pt-3 sm:pt-10 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:pb-3.5 px-2 sm:px-4',
@@ -873,6 +932,7 @@ export function WatchTheater({
                   </div>
                 </div>
               </div>
+              )}
             </div>
           )}
 
@@ -921,8 +981,8 @@ export function WatchTheater({
             </div>
           )}
 
-          <div className={cn('absolute top-1.5 left-1.5 sm:top-2 sm:left-2 z-20 flex items-center gap-1 sm:gap-2 pointer-events-none', chromeClass)}>
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold uppercase">
+          <div className={cn('absolute top-2 left-2 z-20 flex items-center gap-1.5 pointer-events-none', !isCoarse && chromeClass)}>
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-600/95 text-white text-[8px] sm:text-[9px] font-bold uppercase">
               <span className="relative flex h-1.5 w-1.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-70" />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white animate-live-dot" />
@@ -1010,7 +1070,7 @@ export function WatchTheater({
         </div>
 
         {!isFullscreen && showSidebarChat && !showChatOnVideo && (
-          <div className="lg:hidden flex flex-col min-h-[9rem] max-h-[38dvh] flex-1 shrink-0 border-t border-border-subtle bg-surface-1">
+          <div className="lg:hidden flex flex-col min-h-[8rem] max-h-[32dvh] flex-1 shrink-0 border-t border-border-subtle bg-surface-1">
             <ChatOverlay
               messages={chatMessages}
               onSend={onSendChat}

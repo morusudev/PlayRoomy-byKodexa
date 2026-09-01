@@ -187,8 +187,8 @@ export function RoomPage() {
         </div>
       </Modal>
 
-      <header className="shrink-0 border-b border-border-subtle bg-surface-1/90 backdrop-blur-md animate-fade-up">
-        <div className="flex items-center justify-between gap-2 sm:gap-3 h-14 px-3 sm:px-4">
+      <header className="shrink-0 border-b border-border-subtle bg-surface-1 max-lg:bg-surface-1/95 max-lg:backdrop-blur-sm animate-fade-up">
+        <div className="flex items-center justify-between gap-2 sm:gap-3 h-11 sm:h-14 px-2 sm:px-4">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               onClick={() => navigate('/')}

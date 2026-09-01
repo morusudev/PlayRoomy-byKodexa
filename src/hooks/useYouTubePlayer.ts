@@ -12,7 +12,7 @@ import {
   type YtPlayer,
 } from '../services/youtube/player'
 import type { PlayerState } from '../types'
-import { getExpectedTime, shouldCorrectDrift } from '../utils/sync'
+import { getExpectedTime, shouldCorrectDrift, applyRemotePlayback } from '../utils/sync'
 
 interface UseYouTubePlayerOptions {
   stageRef: RefObject<HTMLDivElement | null>
@@ -28,12 +28,12 @@ interface UseYouTubePlayerOptions {
   onError: (message: string) => void
 }
 
-function applyIframeSize(player: YtPlayer, width: number, height: number) {
-  player.setSize(width, height)
+function applyIframeSize(player: YtPlayer, width: number, height: number, cssOnly = false) {
+  if (!cssOnly) {
+    player.setSize(width, height)
+  }
   try {
     const iframe = player.getIframe()
-    iframe.width = String(width)
-    iframe.height = String(height)
     iframe.style.width = '100%'
     iframe.style.height = '100%'
     iframe.style.maxWidth = '100%'
@@ -43,34 +43,8 @@ function applyIframeSize(player: YtPlayer, width: number, height: number) {
     iframe.style.position = 'absolute'
     iframe.style.inset = '0'
     iframe.style.transform = 'none'
-    iframe.style.objectFit = 'contain'
   } catch {
     // ignore
-  }
-}
-
-function applyRemotePlayback(
-  player: YtPlayer,
-  state: PlayerState,
-  audio: { muted: boolean; volume: number },
-) {
-  const expected = Math.max(0, getExpectedTime(state))
-  player.setVolume(audio.volume)
-
-  if (state.playing) {
-    player.mute()
-    player.seekTo(expected, true)
-    player.playVideo()
-    window.setTimeout(() => {
-      player.setVolume(audio.volume)
-      if (audio.muted) player.mute()
-      else player.unMute()
-    }, 400)
-  } else {
-    player.pauseVideo()
-    player.seekTo(state.currentTime, true)
-    if (audio.muted) player.mute()
-    else player.unMute()
   }
 }
 
@@ -113,9 +87,13 @@ export function useYouTubePlayer({
   sizeRef.current = size
   audioRef.current = { muted, volume }
 
-  const minWidth = isCoarse ? 120 : 160
-  const minHeight = isCoarse ? 68 : 90
-  const loadSettleMs = isCoarse ? 900 : 500
+  const minWidth = isCoarse ? 100 : 160
+  const minHeight = isCoarse ? 56 : 90
+  const loadSettleMs = isCoarse ? 700 : 500
+  const driftIntervalMs = isCoarse ? 8000 : 5000
+  const driftThreshold = isCoarse ? 3 : 2
+  const playbackTickMs = isCoarse ? 800 : 400
+  const lastAppliedSize = useRef({ width: 0, height: 0 })
 
   const silenceLocal = (ms: number) => {
     ignoreLocalUntil.current = Date.now() + ms
@@ -245,8 +223,16 @@ export function useYouTubePlayer({
     const player = playerRef.current
     if (!player || !isReady) return
     if (size.width < minWidth || size.height < minHeight) return
-    applyIframeSize(player, size.width, size.height)
-  }, [size.width, size.height, isReady, minWidth, minHeight])
+
+    const dw = Math.abs(size.width - lastAppliedSize.current.width)
+    const dh = Math.abs(size.height - lastAppliedSize.current.height)
+    if (dw < 20 && dh < 20 && lastAppliedSize.current.width > 0) {
+      applyIframeSize(player, size.width, size.height, true)
+      return
+    }
+    lastAppliedSize.current = { width: size.width, height: size.height }
+    applyIframeSize(player, size.width, size.height, isCoarse)
+  }, [size.width, size.height, isReady, minWidth, minHeight, isCoarse])
 
   useEffect(() => {
     const player = playerRef.current
@@ -308,19 +294,19 @@ export function useYouTubePlayer({
     if (!player || !isReady || !state?.videoId) return
     if (state.videoId !== loadedVideoId.current) return
 
-    const key = `${state.playing}:${state.updatedAt}:${Math.floor(state.currentTime)}`
+    const key = `${state.playing}:${state.updatedAt}`
     if (key === lastRemoteKey.current) return
     lastRemoteKey.current = key
 
-    silenceLocal(1200)
+    silenceLocal(isCoarse ? 1600 : 1200)
     applyRemotePlayback(player, state, audioRef.current)
   }, [
     isSyncDriver,
     isReady,
+    isCoarse,
     playerState?.videoId,
     playerState?.playing,
     playerState?.updatedAt,
-    playerState?.currentTime,
   ])
 
   useEffect(() => {
@@ -330,13 +316,13 @@ export function useYouTubePlayer({
       const state = stateRef.current
       if (!player || !state?.videoId || !state.playing) return
       if (state.videoId !== loadedVideoId.current) return
-      if (shouldCorrectDrift(player.getCurrentTime(), state, 2)) {
+      if (shouldCorrectDrift(player.getCurrentTime(), state, driftThreshold)) {
         silenceLocal(800)
         player.seekTo(getExpectedTime(state), true)
       }
-    }, 4000)
+    }, driftIntervalMs)
     return () => window.clearInterval(id)
-  }, [isSyncDriver, isReady])
+  }, [isSyncDriver, isReady, driftIntervalMs, driftThreshold])
 
   useEffect(() => {
     if (!isSyncDriver) return
@@ -347,7 +333,7 @@ export function useYouTubePlayer({
       if (Date.now() < ignoreLocalUntil.current) return
       if (player.getPlayerState() !== YT.PlayerState.PLAYING) return
       callbacksRef.current.onSeek(player.getCurrentTime())
-    }, 5000)
+    }, 10000)
     return () => window.clearInterval(id)
   }, [isSyncDriver, isReady])
 
@@ -442,14 +428,15 @@ export function useYouTubePlayer({
         current = state.currentTime
       }
 
+      const rounded = Math.floor(current * 2) / 2
       setPlayback((prev) =>
-        prev.current === current && prev.duration === duration
+        prev.current === rounded && prev.duration === duration
           ? prev
-          : { current, duration },
+          : { current: rounded, duration },
       )
-    }, 250)
+    }, playbackTickMs)
     return () => window.clearInterval(id)
-  }, [isReady])
+  }, [isReady, playbackTickMs])
 
   return {
     isReady,
