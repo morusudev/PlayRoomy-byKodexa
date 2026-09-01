@@ -7,6 +7,7 @@ import {
 } from 'react'
 import {
   createYouTubePlayer,
+  disableYouTubeCaptions,
   YT,
   YT_ERROR_MESSAGES,
   type YtPlayer,
@@ -189,10 +190,12 @@ export function useYouTubePlayer({
       playerVars,
       events: {
         onStateChange: (event) => {
+          const player = playerRef.current
+          if (player) disableYouTubeCaptions(player)
+
           if (Date.now() < ignoreLocalUntil.current) return
           if (!isSyncDriverRef.current) return
 
-          const player = playerRef.current
           if (!player) return
 
           if (
@@ -248,6 +251,7 @@ export function useYouTubePlayer({
         return
       }
       playerRef.current = player
+      disableYouTubeCaptions(player)
       applyIframeSize(player, sizeRef.current.width, sizeRef.current.height)
       setIsReady(true)
     })
@@ -340,6 +344,7 @@ export function useYouTubePlayer({
       if (!latest || latest.videoId !== videoId) return
       silenceLocal(2000)
       applyRemotePlayback(playerRef.current, latest, audioRef.current, syncMode, true)
+      disableYouTubeCaptions(playerRef.current)
       lastRemoteKey.current = `${latest.playing}:${latest.updatedAt}`
       lastRemotePlaying.current = latest.playing
       checkGestureNeeded()
