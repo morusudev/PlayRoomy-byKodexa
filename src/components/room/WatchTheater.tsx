@@ -160,7 +160,8 @@ export function WatchTheater({
   const isCoarse = useCoarsePointer()
   const uiPinnedBase = scrubbing || touching || touchGrace || showShortcutsHelp
   const mobileControlsPinned = isCoarse && hasVideo && !(playerState?.playing ?? false)
-  const uiPinned = uiPinnedBase || mobileControlsPinned
+  const desktopControlsPinned = !isCoarse && hasVideo && !(playerState?.playing ?? false)
+  const uiPinned = uiPinnedBase || mobileControlsPinned || desktopControlsPinned
   const { isFullscreen, isImmersive, toggle: toggleFullscreen } = useTheaterFullscreen(theaterRef)
   const { flashMessage, flashLarge, showFeedback } = usePlayerFeedback()
   const { controlsVisible, revealControls, hideControls } = useAutoHideControls(
@@ -202,6 +203,11 @@ export function WatchTheater({
 
   const displayVol = muted ? 0 : volume
   const isPlaying = playerState?.playing ?? false
+  const centerPlayVisible = controlsVisible || !isPlaying
+  const centerPlayClass = cn(
+    'transition-opacity duration-300 ease-out',
+    centerPlayVisible ? 'opacity-100' : 'opacity-0 pointer-events-none',
+  )
   const canPlaylistNav = canDrive && (canManageQueue || isOwner)
   const canGoNext = canPlaylistNav && queue.length > 0
   const canGoPrevious = canPlaylistNav && hasPreviousVideo
@@ -871,7 +877,7 @@ export function WatchTheater({
             <div
               className={cn(
                 'absolute inset-0 z-[15] flex items-center justify-center pointer-events-none',
-                chromeClass,
+                centerPlayClass,
               )}
             >
               <button
@@ -883,7 +889,7 @@ export function WatchTheater({
                 className={cn(
                   'h-14 w-14 sm:h-[4.25rem] sm:w-[4.25rem] rounded-full flex items-center justify-center shadow-2xl transition-transform duration-300 touch-manipulation',
                   'bg-black/60 backdrop-blur-md border border-white/25 text-white active:scale-95',
-                  controlsVisible ? 'scale-100 pointer-events-auto' : 'scale-90 pointer-events-none',
+                  centerPlayVisible ? 'scale-100 pointer-events-auto' : 'scale-90 pointer-events-none',
                 )}
                 aria-label={isPlaying ? 'Pausar' : 'Play'}
                 title={isPlaying ? 'Pausar' : 'Play'}
