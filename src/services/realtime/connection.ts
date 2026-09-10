@@ -15,7 +15,7 @@ export type ServerMessage =
   | { type: 'chat'; message: ChatMessage }
   | { type: 'reaction'; reaction: RoomReaction }
   | { type: 'kicked' }
-  | { type: 'pong'; at: number }
+  | { type: 'pong'; at: number; clientTime?: number }
   | { type: 'error'; code: string; message: string }
 
 export type RoomConnectionHandlers = {

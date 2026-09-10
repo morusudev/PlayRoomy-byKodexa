@@ -1,22 +1,45 @@
 import type { PlayerState } from '../types'
 import { YT } from '../services/youtube/player'
 import type { YtPlayer } from '../services/youtube/player'
+import { getServerNow } from './clockSync'
 
 export type SyncApplyMode = 'desktop' | 'mobile'
 
-export function getExpectedTime(state: PlayerState, now = Date.now()): number {
+/** Desktop: tight. Mobile: looser to avoid YT buffering loops, but still corrects. */
+export const SYNC_THRESHOLDS = {
+  desktop: {
+    playSeek: 0.9,
+    pauseSeek: 0.5,
+    microSeekSkip: 0.2,
+    driftCorrect: 1.0,
+    driftIntervalMs: 2500,
+  },
+  mobile: {
+    playSeek: 2.5,
+    pauseSeek: 1.5,
+    microSeekSkip: 0.75,
+    driftCorrect: 2.5,
+    driftIntervalMs: 4000,
+  },
+} as const
+
+export function getExpectedTime(state: PlayerState, now = getServerNow()): number {
   if (!state.playing) return state.currentTime
   const elapsed = (now - state.updatedAt) / 1000
-  return state.currentTime + elapsed
+  return Math.max(0, state.currentTime + elapsed)
 }
 
 export function shouldCorrectDrift(
   localTime: number,
   remoteState: PlayerState,
-  thresholdSec = 1.5,
+  thresholdSec = SYNC_THRESHOLDS.desktop.driftCorrect,
 ): boolean {
   const expected = getExpectedTime(remoteState)
   return Math.abs(localTime - expected) > thresholdSec
+}
+
+export function playerStateKey(state: PlayerState): string {
+  return `${state.revision}:${state.playing}:${state.videoId ?? ''}:${state.updatedAt}`
 }
 
 export function createPlayerState(
@@ -25,7 +48,8 @@ export function createPlayerState(
   return {
     playing: false,
     currentTime: 0,
-    updatedAt: Date.now(),
+    updatedAt: getServerNow(),
+    revision: 0,
     ...partial,
   }
 }
@@ -51,8 +75,8 @@ function restoreAudio(player: YtPlayer, audio: { muted: boolean; volume: number 
 }
 
 /**
- * Mobile: only play/pause — no micro-seeks (prevents YT logo / buffering loops).
- * Desktop: normal sync with moderate seek thresholds.
+ * Apply authoritative room playback to the local YouTube player.
+ * Mobile uses wider thresholds; still seeks on large jumps / play-pause flips.
  */
 export function applyRemotePlayback(
   player: YtPlayer,
@@ -61,10 +85,10 @@ export function applyRemotePlayback(
   mode: SyncApplyMode = 'desktop',
   playingChanged = true,
 ) {
-  const mobile = mode === 'mobile'
+  const thresholds = SYNC_THRESHOLDS[mode]
   const ytState = player.getPlayerState()
 
-  if (isBufferingOrIdle(ytState) && mobile && !playingChanged) {
+  if (isBufferingOrIdle(ytState) && mode === 'mobile' && !playingChanged) {
     return
   }
 
@@ -74,43 +98,17 @@ export function applyRemotePlayback(
 
   player.setVolume(audio.volume)
 
-  if (mobile) {
-    if (state.playing) {
-      if (!playing) {
-        if (Math.abs(localTime - expected) > 8) {
-          player.seekTo(expected, true)
-        }
-        player.mute()
-        player.playVideo()
-        restoreAudio(player, audio, 600)
-      }
-      return
-    }
-
-    if (playing) {
-      player.pauseVideo()
-    }
-    if (playingChanged && Math.abs(localTime - state.currentTime) > 3) {
-      player.seekTo(state.currentTime, true)
-    }
-    if (audio.muted) player.mute()
-    else player.unMute()
-    return
-  }
-
-  const playSeekThreshold = 1.5
-  const pauseSeekThreshold = 0.75
-
   if (state.playing) {
-    if (playingChanged || Math.abs(localTime - expected) > playSeekThreshold) {
-      if (Math.abs(localTime - expected) > 0.25) {
+    const drift = Math.abs(localTime - expected)
+    if (playingChanged || drift > thresholds.playSeek) {
+      if (drift > thresholds.microSeekSkip) {
         player.seekTo(expected, true)
       }
     }
     if (!playing) {
       player.mute()
       player.playVideo()
-      restoreAudio(player, audio, 350)
+      restoreAudio(player, audio, mode === 'mobile' ? 600 : 350)
     } else if (audio.muted) {
       player.mute()
     } else {
@@ -122,28 +120,48 @@ export function applyRemotePlayback(
   if (playing) {
     player.pauseVideo()
   }
-  if (playingChanged || Math.abs(localTime - state.currentTime) > pauseSeekThreshold) {
-    if (Math.abs(localTime - state.currentTime) > 0.4) {
-      player.seekTo(state.currentTime, true)
+  const pauseTarget = state.currentTime
+  const pauseDrift = Math.abs(localTime - pauseTarget)
+  if (playingChanged || pauseDrift > thresholds.pauseSeek) {
+    if (pauseDrift > thresholds.microSeekSkip) {
+      player.seekTo(pauseTarget, true)
     }
   }
   if (audio.muted) player.mute()
   else player.unMute()
 }
 
+/** Soft drift correction while playing (or paused position check). */
 export function applyRemoteSeekOnly(
   player: YtPlayer,
   state: PlayerState,
   mode: SyncApplyMode = 'desktop',
 ) {
-  if (mode === 'mobile') return
-
+  const thresholds = SYNC_THRESHOLDS[mode]
   const ytState = player.getPlayerState()
+
   if (isBufferingOrIdle(ytState)) return
 
   const localTime = player.getCurrentTime()
   const target = state.playing ? Math.max(0, getExpectedTime(state)) : state.currentTime
 
-  if (Math.abs(localTime - target) <= 2) return
+  if (Math.abs(localTime - target) <= thresholds.driftCorrect) return
   player.seekTo(target, true)
+}
+
+/** True when local player already matches remote closely enough to skip re-apply. */
+export function matchesRemoteClosely(
+  player: YtPlayer,
+  state: PlayerState,
+  mode: SyncApplyMode = 'desktop',
+): boolean {
+  const thresholds = SYNC_THRESHOLDS[mode]
+  const ytState = player.getPlayerState()
+  const localPlaying = isLocallyPlaying(ytState)
+  if (localPlaying !== state.playing && ytState !== YT.PlayerState.BUFFERING) {
+    return false
+  }
+  const localTime = player.getCurrentTime()
+  const target = state.playing ? getExpectedTime(state) : state.currentTime
+  return Math.abs(localTime - target) <= thresholds.playSeek
 }

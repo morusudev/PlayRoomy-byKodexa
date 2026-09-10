@@ -26,6 +26,7 @@ import {
 } from '../../utils/storage'
 import { getBackendConnectionErrorMessage } from '../../config'
 import { generateRoomId } from '../../utils/roomId'
+import { applyPongSample, resetClockSync } from '../../utils/clockSync'
 
 export interface RoomManagerCallbacks {
   onStateChange: (state: Partial<RoomManagerState>) => void
@@ -45,6 +46,19 @@ export interface RoomManagerState {
   needsPassword: boolean
 }
 
+const PING_INTERVAL_MS = 5000
+const RECONNECT_BASE_MS = 800
+const RECONNECT_MAX_MS = 12_000
+const RECONNECT_MAX_ATTEMPTS = 20
+
+function normalizePlayerState(state: RoomState): RoomState {
+  if (typeof state.player.revision === 'number') return state
+  return {
+    ...state,
+    player: { ...state.player, revision: 0 },
+  }
+}
+
 export class RoomManager {
   private socket: RoomSocket | null = null
   private roomId: string
@@ -54,7 +68,10 @@ export class RoomManager {
   private nickname = ''
   private pingTimer: ReturnType<typeof setInterval> | null = null
   private joinRetryTimer: ReturnType<typeof setTimeout> | null = null
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private joinRetries = 0
+  private reconnectAttempts = 0
+  private lastPingSentAt = 0
   private reactionTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private callbacks: RoomManagerCallbacks
   private state: RoomManagerState = {
@@ -71,6 +88,7 @@ export class RoomManager {
   }
   private lastJoinCreate = false
   private lastPasswordHash: string | null = null
+  private everJoined = false
 
   constructor(roomId: string, callbacks: RoomManagerCallbacks, password?: string) {
     this.roomId = roomId
@@ -88,11 +106,23 @@ export class RoomManager {
   }
 
   async connect(nickname: string): Promise<void> {
-    this.update({ connectionStatus: 'connecting', error: null, waitingForHost: false })
     this.nickname = nickname.trim() || 'Convidado'
+    this.reconnectAttempts = 0
+    resetClockSync()
+    await this.openSocketAndJoin(false)
+  }
+
+  private async openSocketAndJoin(isReconnect: boolean): Promise<void> {
+    if (this.disposed) return
+
+    this.update({
+      connectionStatus: isReconnect ? 'reconnecting' : 'connecting',
+      error: isReconnect ? 'Reconectando…' : null,
+      waitingForHost: false,
+    })
 
     const createOptions = loadRoomCreateOptions(this.roomId)
-    const isCreator = !!createOptions
+    const isCreator = !!createOptions && !this.everJoined
     const pwd = (this.password || createOptions?.password)?.trim() || undefined
     const passwordHash = passwordHashForRoom(this.roomId, pwd)
 
@@ -109,20 +139,21 @@ export class RoomManager {
           if (!this.disposed) this.handleServer(msg)
         },
         onClose: () => {
-          if (this.disposed) return
-          this.update({
-            connectionStatus: 'disconnected',
-            error: 'Conexão perdida com o servidor. Verifique sua internet e tente de novo.',
-            waitingForHost: false,
-          })
+          if (this.disposed || this.state.isKicked) return
+          this.clearPing()
+          this.scheduleReconnect()
         },
         onError: (message) => {
-          if (!this.disposed) {
+          if (!this.disposed && !this.everJoined) {
             this.update({ connectionStatus: 'error', error: message })
           }
         },
       })
     } catch {
+      if (this.everJoined) {
+        this.scheduleReconnect()
+        return
+      }
       this.update({
         connectionStatus: 'error',
         error: getBackendConnectionErrorMessage(),
@@ -135,26 +166,73 @@ export class RoomManager {
       return
     }
 
+    this.reconnectAttempts = 0
     this.socket.send({
       type: 'join',
       roomId: this.roomId,
       userId: this.userId,
       name: this.nickname,
-      create: isCreator,
-      passwordHash,
+      create: isCreator || this.lastJoinCreate,
+      passwordHash: passwordHash ?? this.lastPasswordHash,
     })
-    this.lastJoinCreate = isCreator
-    this.lastPasswordHash = passwordHash
+    this.lastJoinCreate = isCreator || this.lastJoinCreate
+    this.lastPasswordHash = passwordHash ?? this.lastPasswordHash
     this.joinRetries = 0
 
-    // Keep create options until welcome — so refresh/HMR can recreate as host.
-    if (!isCreator) {
+    if (!isCreator && !this.everJoined) {
       this.update({ waitingForHost: true })
     }
 
-    this.pingTimer = setInterval(() => {
-      this.socket?.send({ type: 'ping' })
-    }, 15000)
+    this.startPing()
+  }
+
+  private startPing() {
+    this.clearPing()
+    const sendPing = () => {
+      if (!this.socket?.isOpen()) return
+      this.lastPingSentAt = Date.now()
+      this.socket.send({ type: 'ping', clientTime: this.lastPingSentAt })
+    }
+    sendPing()
+    this.pingTimer = setInterval(sendPing, PING_INTERVAL_MS)
+  }
+
+  private clearPing() {
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer)
+      this.pingTimer = null
+    }
+  }
+
+  private scheduleReconnect() {
+    if (this.disposed || this.state.isKicked) return
+    if (this.reconnectTimer) return
+
+    if (this.reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
+      this.update({
+        connectionStatus: 'disconnected',
+        error: 'Conexão perdida com o servidor. Atualize a página para tentar de novo.',
+        waitingForHost: false,
+      })
+      return
+    }
+
+    const attempt = this.reconnectAttempts
+    this.reconnectAttempts += 1
+    const delay = Math.min(
+      RECONNECT_MAX_MS,
+      RECONNECT_BASE_MS * Math.pow(1.6, attempt) + Math.random() * 250,
+    )
+
+    this.update({
+      connectionStatus: 'reconnecting',
+      error: 'Conexão instável — reconectando…',
+    })
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null
+      void this.openSocketAndJoin(true)
+    }, delay)
   }
 
   private handleServer(msg: ServerMessage) {
@@ -169,12 +247,16 @@ export class RoomManager {
             joinedAt: Date.now(),
           } satisfies Participant)
 
-        const hadVideo = !!msg.state.player.videoId
+        const state = normalizePlayerState(msg.state)
+        const hadVideo = !!state.player.videoId
+        const wasReconnect = this.everJoined
+        this.everJoined = true
+
         this.update({
           connectionStatus: 'connected',
-          roomState: msg.state,
+          roomState: state,
           localParticipant: me,
-          peerCount: Math.max(0, msg.state.participants.length - 1),
+          peerCount: Math.max(0, state.participants.length - 1),
           waitingForHost: false,
           needsPassword: false,
           error: null,
@@ -185,12 +267,14 @@ export class RoomManager {
           this.joinRetryTimer = null
         }
 
-        if (me.role === 'owner') {
+        if (wasReconnect) {
+          this.callbacks.onToast('Reconectado — sync restaurado', 'success')
+        } else if (me.role === 'owner') {
           clearRoomCreateOptions(this.roomId)
           this.callbacks.onToast('Sala pronta. Compartilhe o convite HTTPS!', 'success')
         } else {
           this.callbacks.onToast(
-            hadVideo ? 'Conectado. Sincronizando o video...' : 'Conectado à sala!',
+            hadVideo ? 'Conectado. Sincronizando o vídeo...' : 'Conectado à sala!',
             'success',
           )
         }
@@ -208,7 +292,7 @@ export class RoomManager {
             ? this.state.roomState?.participants.find((p) => p.id === msg.id)?.name
             : undefined
 
-        const state = msg.state
+        const state = normalizePlayerState(msg.state)
         const me = state.participants.find((p) => p.id === this.userId)
         this.update({
           roomState: state,
@@ -216,6 +300,7 @@ export class RoomManager {
           peerCount: Math.max(0, state.participants.length - 1),
           waitingForHost: false,
           connectionStatus: 'connected',
+          error: null,
         })
 
         if (msg.type === 'user_joined' && msg.participant.id !== this.userId) {
@@ -282,7 +367,6 @@ export class RoomManager {
             return
           }
 
-          // Guest arrived early — retry join while host is still creating.
           if (this.joinRetries < 15 && this.socket?.isOpen()) {
             this.joinRetries += 1
             this.update({
@@ -331,8 +415,16 @@ export class RoomManager {
         this.callbacks.onToast(msg.message, 'error')
         break
 
-      case 'pong':
+      case 'pong': {
+        const sentAt =
+          typeof msg.clientTime === 'number' && Number.isFinite(msg.clientTime)
+            ? msg.clientTime
+            : this.lastPingSentAt
+        if (sentAt > 0 && typeof msg.at === 'number') {
+          applyPongSample(sentAt, msg.at)
+        }
         break
+      }
 
       default: {
         const _exhaustive: never = msg
@@ -363,6 +455,7 @@ export class RoomManager {
   /** If room wasn't created yet, become host (only when server said room_not_found). */
   claimHost() {
     if (!this.socket?.isOpen()) return
+    this.lastJoinCreate = true
     this.socket.send({
       type: 'join',
       roomId: this.roomId,
@@ -387,7 +480,12 @@ export class RoomManager {
   }
 
   requestSync() {
-    // Server already pushes full state; no-op
+    // Full state is authoritative; ask server for a fresh ping + clients already
+    // re-apply on the latest revision via the player hook.
+    if (this.socket?.isOpen()) {
+      this.lastPingSentAt = Date.now()
+      this.socket.send({ type: 'ping', clientTime: this.lastPingSentAt })
+    }
   }
 
   sendChat(text: string) {
@@ -494,14 +592,16 @@ export class RoomManager {
 
   disconnect() {
     this.disposed = true
-    if (this.pingTimer) clearInterval(this.pingTimer)
+    this.clearPing()
     if (this.joinRetryTimer) clearTimeout(this.joinRetryTimer)
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
     for (const timer of this.reactionTimers.values()) {
       clearTimeout(timer)
     }
     this.reactionTimers.clear()
     this.socket?.close()
     this.socket = null
+    resetClockSync()
     this.update({ connectionStatus: 'disconnected', waitingForHost: false, liveReactions: [] })
   }
 
@@ -515,5 +615,4 @@ export class RoomManager {
   }
 }
 
-// silence unused import if tree-shaken oddly
 export type { QueueItem }

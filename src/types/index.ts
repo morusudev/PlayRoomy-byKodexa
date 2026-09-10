@@ -31,7 +31,10 @@ export interface PlayerState {
   videoId: string | null
   playing: boolean
   currentTime: number
+  /** Server wall-clock when currentTime was anchored. */
   updatedAt: number
+  /** Monotonic server counter — clients use this to detect new authority updates. */
+  revision: number
 }
 
 export type PlayerEventType =
@@ -161,5 +164,5 @@ export const MAX_PARTICIPANTS = 20
 export const MAX_CHAT_LENGTH = 500
 export const CHAT_RATE_LIMIT = 3
 export const CHAT_RATE_WINDOW_MS = 2000
-export const DRIFT_THRESHOLD_SEC = 1.5
-export const SYNC_INTERVAL_MS = 8000
+export const DRIFT_THRESHOLD_SEC = 1.0
+export const SYNC_INTERVAL_MS = 2500

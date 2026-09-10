@@ -17,6 +17,9 @@ import {
   getExpectedTime,
   applyRemotePlayback,
   applyRemoteSeekOnly,
+  matchesRemoteClosely,
+  playerStateKey,
+  SYNC_THRESHOLDS,
   type SyncApplyMode,
 } from '../utils/sync'
 
@@ -83,6 +86,8 @@ export function useYouTubePlayer({
   const loadedVideoId = useRef<string | null>(null)
   const lastRemoteKey = useRef('')
   const lastRemotePlaying = useRef<boolean | null>(null)
+  const lastAppliedRevision = useRef(-1)
+  const suppressEchoUntil = useRef(0)
   const pauseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const created = useRef(false)
   const audioRef = useRef({ muted: false, volume: 80 })
@@ -100,6 +105,7 @@ export function useYouTubePlayer({
   const minHeight = isCoarse ? 56 : 90
   const loadSettleMs = isCoarse ? 550 : 500
   const playbackTickMs = isCoarse ? 1000 : 400
+  const driftIntervalMs = SYNC_THRESHOLDS[syncMode].driftIntervalMs
 
   canSendRef.current = canSendCommands
   isSyncDriverRef.current = isSyncDriver
@@ -110,6 +116,12 @@ export function useYouTubePlayer({
 
   const silenceLocal = (ms: number) => {
     ignoreLocalUntil.current = Date.now() + ms
+  }
+
+  /** After we send a command, skip re-applying the echo if we already match. */
+  const markLocalCommand = (ms = 900) => {
+    silenceLocal(ms)
+    suppressEchoUntil.current = Date.now() + ms
   }
 
   const checkGestureNeeded = useCallback(() => {
@@ -198,6 +210,8 @@ export function useYouTubePlayer({
           if (player) disableYouTubeCaptions(player)
 
           if (Date.now() < ignoreLocalUntil.current) return
+          // Only the sync driver publishes spontaneous YT play/pause/ended.
+          // Other controllers use explicit UI commands (play/pause/seekTo).
           if (!isSyncDriverRef.current) return
 
           if (!player) return
@@ -220,6 +234,7 @@ export function useYouTubePlayer({
             }
             setNeedsGesture(false)
             if (remote?.playing) return
+            markLocalCommand(800)
             callbacksRef.current.onPlay(time)
             return
           }
@@ -234,12 +249,14 @@ export function useYouTubePlayer({
               const p = playerRef.current
               if (!p) return
               if (p.getPlayerState() !== YT.PlayerState.PAUSED) return
+              markLocalCommand(800)
               callbacksRef.current.onPause(p.getCurrentTime())
             }, 280)
             return
           }
 
           if (event.data === YT.PlayerState.ENDED) {
+            markLocalCommand(800)
             callbacksRef.current.onVideoEnded()
           }
         },
@@ -271,6 +288,7 @@ export function useYouTubePlayer({
       loadedVideoId.current = null
       lastRemoteKey.current = ''
       lastRemotePlaying.current = null
+      lastAppliedRevision.current = -1
       if (stageRef.current) stageRef.current.innerHTML = ''
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -314,6 +332,7 @@ export function useYouTubePlayer({
         loadedVideoId.current = null
         lastRemoteKey.current = ''
         lastRemotePlaying.current = null
+        lastAppliedRevision.current = -1
         try {
           player.stopVideo()
         } catch {
@@ -328,6 +347,7 @@ export function useYouTubePlayer({
     loadedVideoId.current = videoId
     lastRemoteKey.current = ''
     lastRemotePlaying.current = null
+    lastAppliedRevision.current = -1
 
     silenceLocal(3000)
 
@@ -351,61 +371,74 @@ export function useYouTubePlayer({
       silenceLocal(2000)
       applyRemotePlayback(playerRef.current, latest, audioRef.current, syncMode, true)
       disableYouTubeCaptions(playerRef.current)
-      lastRemoteKey.current = `${latest.playing}:${latest.updatedAt}`
+      lastRemoteKey.current = playerStateKey(latest)
       lastRemotePlaying.current = latest.playing
+      lastAppliedRevision.current = latest.revision ?? 0
       checkGestureNeeded()
     }, loadSettleMs)
   }, [playerState?.videoId, isReady, loadSettleMs, syncMode, checkGestureNeeded])
 
+  // Everyone follows authoritative server state — including the sync driver —
+  // so a controller seek is never overwritten by a stale local timeline.
   useEffect(() => {
-    if (isSyncDriver) return
-
     const player = playerRef.current
     const state = playerState
     if (!player || !isReady || !state?.videoId) return
     if (state.videoId !== loadedVideoId.current) return
 
-    const key = `${state.playing}:${state.updatedAt}`
+    const revision = state.revision ?? 0
+    const key = playerStateKey(state)
     if (key === lastRemoteKey.current) return
 
     const playingChanged = lastRemotePlaying.current !== state.playing
+    const isEchoWindow = Date.now() < suppressEchoUntil.current
+    const alreadyClose = matchesRemoteClosely(player, state, syncMode)
+
     lastRemoteKey.current = key
     lastRemotePlaying.current = state.playing
+    lastAppliedRevision.current = revision
 
-    silenceLocal(isCoarse ? 2000 : 1200)
+    // Skip server echo of our own command when local player already matches.
+    if (isEchoWindow && alreadyClose) {
+      return
+    }
 
-    if (playingChanged) {
-      applyRemotePlayback(player, state, audioRef.current, syncMode, true)
+    silenceLocal(isCoarse ? 1800 : 1000)
+
+    if (playingChanged || !alreadyClose) {
+      applyRemotePlayback(player, state, audioRef.current, syncMode, playingChanged)
       disableYouTubeCaptions(player)
       checkGestureNeeded()
       return
     }
 
-    if (!isCoarse) {
-      applyRemoteSeekOnly(player, state, syncMode)
-    }
+    applyRemoteSeekOnly(player, state, syncMode)
   }, [
-    isSyncDriver,
     isReady,
     isCoarse,
     syncMode,
     playerState?.videoId,
     playerState?.playing,
     playerState?.updatedAt,
+    playerState?.revision,
+    playerState?.currentTime,
     checkGestureNeeded,
   ])
 
+  // Periodic drift correction for all clients while video is loaded.
   useEffect(() => {
-    if (isSyncDriver || isCoarse) return
+    if (!isReady) return
     const id = window.setInterval(() => {
       const player = playerRef.current
       const state = stateRef.current
-      if (!player || !state?.videoId || !state.playing) return
+      if (!player || !state?.videoId) return
       if (state.videoId !== loadedVideoId.current) return
-      applyRemoteSeekOnly(player, state, 'desktop')
-    }, 6000)
+      if (Date.now() < ignoreLocalUntil.current) return
+      if (Date.now() < suppressEchoUntil.current) return
+      applyRemoteSeekOnly(player, state, syncMode)
+    }, driftIntervalMs)
     return () => window.clearInterval(id)
-  }, [isSyncDriver, isReady, isCoarse])
+  }, [isReady, syncMode, driftIntervalMs])
 
   useEffect(() => {
     if (!isReady) return
@@ -419,6 +452,7 @@ export function useYouTubePlayer({
 
   const handleSeek = useCallback((time: number) => {
     if (!canSendRef.current) return
+    markLocalCommand()
     callbacksRef.current.onSeek(time)
   }, [])
 
@@ -457,7 +491,7 @@ export function useYouTubePlayer({
     const player = playerRef.current
     if (!player || !canSendRef.current) return
     userActivatedRef.current = true
-    silenceLocal(600)
+    markLocalCommand()
     const t = player.getCurrentTime()
     player.playVideo()
     callbacksRef.current.onPlay(t)
@@ -468,7 +502,7 @@ export function useYouTubePlayer({
     const player = playerRef.current
     if (!player || !canSendRef.current) return
     userActivatedRef.current = true
-    silenceLocal(600)
+    markLocalCommand()
     const t = player.getCurrentTime()
     player.pauseVideo()
     callbacksRef.current.onPause(t)
@@ -478,7 +512,7 @@ export function useYouTubePlayer({
     const player = playerRef.current
     if (!player || !canSendRef.current) return
     userActivatedRef.current = true
-    silenceLocal(600)
+    markLocalCommand()
     const t = Math.max(0, player.getCurrentTime() + delta)
     player.seekTo(t, true)
     callbacksRef.current.onSeek(t)
@@ -488,7 +522,7 @@ export function useYouTubePlayer({
     const player = playerRef.current
     if (!player || !canSendRef.current) return
     userActivatedRef.current = true
-    silenceLocal(600)
+    markLocalCommand()
     const duration = player.getDuration()
     const t =
       duration > 0
@@ -509,9 +543,11 @@ export function useYouTubePlayer({
 
       const duration = player.getDuration() || 0
       let current = player.getCurrentTime() || 0
-      if (!isSyncDriverRef.current && state?.playing) {
+
+      // Progress bar follows room authority so scrub UI stays shared.
+      if (state?.playing) {
         current = getExpectedTime(state)
-      } else if (!isSyncDriverRef.current && state) {
+      } else if (state) {
         current = state.currentTime
       }
 

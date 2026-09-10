@@ -17,6 +17,7 @@ interface PlayerState {
   playing: boolean
   currentTime: number
   updatedAt: number
+  revision: number
 }
 
 interface QueueItem {
@@ -79,7 +80,7 @@ type Inbound =
   | { type: 'set_role'; by: string; targetId: string; role: Role }
   | { type: 'kick'; by: string; targetId: string }
   | { type: 'transfer_control'; by: string; targetId: string | null }
-  | { type: 'ping' }
+  | { type: 'ping'; clientTime?: number }
 
 const ROLE_PRIORITY: Record<Role, number> = {
   owner: 4,
@@ -184,7 +185,22 @@ function broadcast(
 
 function expectedTime(player: PlayerState, now = Date.now()) {
   if (!player.playing) return player.currentTime
-  return player.currentTime + (now - player.updatedAt) / 1000
+  return Math.max(0, player.currentTime + (now - player.updatedAt) / 1000)
+}
+
+function nextPlayer(
+  prev: PlayerState,
+  patch: Omit<Partial<PlayerState>, 'revision'> &
+    Pick<PlayerState, 'playing' | 'currentTime' | 'updatedAt'> &
+    Partial<Pick<PlayerState, 'videoId'>>,
+): PlayerState {
+  return {
+    videoId: patch.videoId !== undefined ? patch.videoId : prev.videoId,
+    playing: patch.playing,
+    currentTime: Math.max(0, patch.currentTime),
+    updatedAt: patch.updatedAt,
+    revision: prev.revision + 1,
+  }
 }
 
 export type RoomyHttpServer = {
@@ -211,7 +227,9 @@ export function attachRoomyWss(httpServer: RoomyHttpServer, options: AttachRoomy
   const emptyTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const chatCooldown = new Map<string, number>()
   const reactionCooldown = new Map<string, number>()
+  const playerActionCooldown = new Map<string, number>()
   const validReactions = new Set(['fire', 'heart', 'laugh', 'clap'])
+  const PLAYER_ACTION_MIN_MS = 40
 
   function getStats(): RoomServerStats {
     return {
@@ -344,7 +362,11 @@ export function attachRoomyWss(httpServer: RoomyHttpServer, options: AttachRoomy
   function handleMessage(client: ClientSocket, msg: Inbound) {
     switch (msg.type) {
       case 'ping':
-        send(client, { type: 'pong', at: Date.now() })
+        send(client, {
+          type: 'pong',
+          at: Date.now(),
+          clientTime: typeof msg.clientTime === 'number' ? msg.clientTime : undefined,
+        })
         return
       case 'join':
         handleJoin(client, msg)
@@ -427,6 +449,7 @@ export function attachRoomyWss(httpServer: RoomyHttpServer, options: AttachRoomy
           playing: false,
           currentTime: 0,
           updatedAt: Date.now(),
+          revision: 0,
         },
         queue: [],
         playHistory: [],
@@ -529,41 +552,62 @@ export function attachRoomyWss(httpServer: RoomyHttpServer, options: AttachRoomy
     if (!room) return
     const actor = findActor(room, msg.by)
     if (!actor) return
+    if (client.userId && msg.by !== client.userId) return
 
     const now = Date.now()
-    let player = { ...room.player }
+    const cooldownKey = `${room.roomId}:${actor.id}`
+    const lastAction = playerActionCooldown.get(cooldownKey) ?? 0
+    if (now - lastAction < PLAYER_ACTION_MIN_MS) return
+    playerActionCooldown.set(cooldownKey, now)
+
+    const prev = room.player
+    let player = prev
 
     switch (msg.action) {
-      case 'PLAY':
+      case 'PLAY': {
         if (!canControl(actor, room)) return
-        player = {
-          ...player,
+        const t =
+          typeof msg.currentTime === 'number' && Number.isFinite(msg.currentTime)
+            ? Math.max(0, msg.currentTime)
+            : expectedTime(prev, now)
+        // Ignore no-op play spam that would reset the timeline.
+        if (prev.playing && Math.abs(t - expectedTime(prev, now)) < 0.35) return
+        player = nextPlayer(prev, {
           playing: true,
-          currentTime: msg.currentTime ?? expectedTime(player, now),
+          currentTime: t,
           updatedAt: now,
-        }
+        })
         break
-      case 'PAUSE':
+      }
+      case 'PAUSE': {
         if (!canControl(actor, room)) return
-        player = {
-          ...player,
+        const t =
+          typeof msg.currentTime === 'number' && Number.isFinite(msg.currentTime)
+            ? Math.max(0, msg.currentTime)
+            : expectedTime(prev, now)
+        if (!prev.playing && Math.abs(t - prev.currentTime) < 0.35) return
+        player = nextPlayer(prev, {
           playing: false,
-          currentTime: msg.currentTime ?? expectedTime(player, now),
+          currentTime: t,
           updatedAt: now,
-        }
+        })
         break
-      case 'SEEK':
+      }
+      case 'SEEK': {
         if (!canControl(actor, room)) return
-        {
-          const nextTime = msg.currentTime ?? player.currentTime
-          const jumped = Math.abs(nextTime - player.currentTime) > 2.5
-          player = {
-            ...player,
-            currentTime: nextTime,
-            updatedAt: jumped ? now : player.updatedAt,
-          }
-        }
+        if (typeof msg.currentTime !== 'number' || !Number.isFinite(msg.currentTime)) return
+        const nextTime = Math.max(0, msg.currentTime)
+        const expected = expectedTime(prev, now)
+        // Tiny scrub noise — ignore to avoid fighting YouTube buffer jitter.
+        if (Math.abs(nextTime - expected) < 0.2) return
+        player = nextPlayer(prev, {
+          playing: prev.playing,
+          currentTime: nextTime,
+          // Always re-anchor clock on intentional seek (fixes "seek then snap back").
+          updatedAt: now,
+        })
         break
+      }
       case 'VIDEO_CHANGE': {
         if (!canChangeVideo(actor, room) && !canControl(actor, room)) return
         const nextVideoId = msg.videoId ?? null
@@ -573,12 +617,12 @@ export function attachRoomyWss(httpServer: RoomyHttpServer, options: AttachRoomy
         }
         room.currentVideoTitle =
           msg.title?.trim().slice(0, 120) || room.currentVideoTitle || 'Vídeo'
-        player = {
+        player = nextPlayer(prev, {
           videoId: nextVideoId,
           playing: true,
           currentTime: 0,
           updatedAt: now,
-        }
+        })
         break
       }
       case 'VIDEO_ENDED': {
@@ -588,26 +632,30 @@ export function attachRoomyWss(httpServer: RoomyHttpServer, options: AttachRoomy
           rememberCurrentVideo(room)
           room.queue = room.queue.slice(1)
           room.currentVideoTitle = next.title
-          player = {
+          player = nextPlayer(prev, {
             videoId: next.videoId,
             playing: true,
             currentTime: 0,
             updatedAt: now,
-          }
+          })
         } else {
-          player = { ...player, playing: false, updatedAt: now }
+          player = nextPlayer(prev, {
+            playing: false,
+            currentTime: expectedTime(prev, now),
+            updatedAt: now,
+          })
         }
         break
       }
       case 'VIDEO_STOP': {
         if (!canChangeVideo(actor, room) && !canControl(actor, room)) return
         if (!room.player.videoId) return
-        player = {
+        player = nextPlayer(prev, {
           videoId: null,
           playing: false,
           currentTime: 0,
           updatedAt: now,
-        }
+        })
         room.currentVideoTitle = null
         break
       }
@@ -710,12 +758,12 @@ export function attachRoomyWss(httpServer: RoomyHttpServer, options: AttachRoomy
     rememberCurrentVideo(room)
     room.queue = room.queue.slice(1)
     room.currentVideoTitle = next.title
-    room.player = {
+    room.player = nextPlayer(room.player, {
       videoId: next.videoId,
       playing: true,
       currentTime: 0,
       updatedAt: Date.now(),
-    }
+    })
     broadcast(room, sockets, { type: 'state', state: publicState(room) })
   }
 
@@ -738,12 +786,12 @@ export function attachRoomyWss(httpServer: RoomyHttpServer, options: AttachRoomy
     }
 
     room.currentVideoTitle = previous.title
-    room.player = {
+    room.player = nextPlayer(room.player, {
       videoId: previous.videoId,
       playing: true,
       currentTime: 0,
       updatedAt: Date.now(),
-    }
+    })
     broadcast(room, sockets, { type: 'state', state: publicState(room) })
   }
 
