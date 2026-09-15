@@ -1,4 +1,4 @@
-import { LogIn } from 'lucide-react'
+import { ArrowUpRight, LogIn } from 'lucide-react'
 
 type JoinHeaderButtonProps = {
   onClick: () => void
@@ -9,13 +9,11 @@ export function JoinHeaderButton({ onClick }: JoinHeaderButtonProps) {
     <button
       type="button"
       onClick={onClick}
-      className="btn-join-cta group relative shrink-0 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl font-bold text-sm text-black overflow-hidden"
+      className="landing-nav-join group inline-flex items-center gap-2 px-3.5 py-2 rounded-full text-[13px] font-semibold text-black"
     >
-      <span className="btn-join-cta-glow" aria-hidden />
-      <span className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-black/15 group-hover:bg-black/10 transition-colors">
-        <LogIn className="w-3.5 h-3.5 transition-transform duration-300 group-hover:translate-x-0.5" />
-      </span>
-      <span className="relative">Entrar</span>
+      <LogIn className="w-3.5 h-3.5 transition-transform duration-300 group-hover:translate-x-0.5" />
+      Entrar
+      <ArrowUpRight className="w-3.5 h-3.5 opacity-70 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
     </button>
   )
 }

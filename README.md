@@ -4,7 +4,7 @@
 
 by **[Kodexa](https://kodexalabs.com.br)**
 
-Create a room, share the link, and watch together. Play, pause, seek, and playlists stay in sync for everyone. No app install, no sign up, runs in the browser.
+Create a room, share the link, and watch together. Play, pause, seek, and playlists stay in sync for everyone. No app install, no sign up — runs in the browser.
 
 🌐 **Live:** [playroomy.vercel.app](https://playroomy.vercel.app)
 
@@ -12,7 +12,7 @@ Create a room, share the link, and watch together. Play, pause, seek, and playli
 
 ---
 
-## 🎬 What is it?
+## What is it?
 
 PlayRoomy is a web app to binge YouTube with friends. A host creates a room, guests join via link, and video playback stays synchronized in real time.
 
@@ -20,28 +20,28 @@ Works on phone, tablet, and desktop. Great for WhatsApp groups, Discord, or voic
 
 ---
 
-## ✨ Features
+## Features
 
 | Feature | Details |
 |---------|---------|
-| 🔄 Real time sync | Play, pause, and seek stay aligned |
-| 🔗 Invite by link | One link, any device |
-| 📋 Shared playlist | Queue videos for the whole room |
-| 💬 Live chat | Message while you watch |
-| 🔒 Password rooms | Optional privacy |
-| ⌨️ Keyboard shortcuts | Fast player controls |
-| 📱 Mobile friendly | Layout built for phones |
+| Real-time sync | Play, pause, and seek stay aligned |
+| Invite by link | One link, any device |
+| Shared playlist | Queue videos for the whole room |
+| Live chat & reactions | Hang out while you watch |
+| Password rooms | Optional privacy |
+| Keyboard shortcuts | Fast player controls |
+| Mobile friendly | Layout built for phones |
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
-Frontend (Vercel)          Backend (Discloud)
-     │                            │
-     │    WebSocket /roomy-ws     │
-     └────────────────────────────┘
-              In memory rooms
+Frontend                     Backend (WebSocket API)
+     │                              │
+     │     WebSocket /roomy-ws      │
+     └──────────────────────────────┘
+              In-memory rooms
 ```
 
 **Frontend:** React + Vite + Tailwind  
@@ -50,7 +50,7 @@ No database. Rooms exist only while people are connected.
 
 ---
 
-## 🚀 Run locally
+## Run locally
 
 **Requirements:** Node.js 20+
 
@@ -78,64 +78,70 @@ Creates a temporary public link while your machine stays on.
 
 ---
 
-## 📦 Production deploy
+## Production deploy
 
-### Frontend → Vercel
+### Frontend
 
-Connect the GitHub repo on Vercel. `.vercelignore` excludes `backend/` from the upload.
+Deploy the Vite app (e.g. Vercel). `.vercelignore` excludes `backend/` from the upload.
 
 **Build:** `npm run build`  
 **Output:** `dist`
 
-Set environment variables in the Vercel dashboard. Do not commit real values to Git.
+Set environment variables in your host dashboard. Do not commit real secrets to Git.
 
-### Backend → Discloud
+Point `VITE_WS_URL` at your backend WebSocket origin (the app appends `/roomy-ws` when needed).
+
+### Backend
+
+Run the API in `backend/` on any host that supports a persistent Node process and WebSockets.
 
 ```bash
-npm run pack:discloud
+cd backend
+npm install
+npm run dev
 ```
 
-Upload `playroomy-discloud.zip` to Discloud (Platinum+ plan, 512 MB RAM).
+See `backend/.env.example` for variables (`PORT`, `ALLOWED_ORIGINS`, room limits, etc.).
 
-Full guide: [DEPLOY.md](./DEPLOY.md)
+More detail: [DEPLOY.md](./DEPLOY.md) · [backend/README.md](./backend/README.md)
 
 ---
 
-## ⚙️ Environment variables
+## Environment variables
 
 | Layer | Reference file | Where to set values |
 |-------|----------------|---------------------|
-| Frontend | `.env` | Vercel dashboard or `.env.local` |
-| Backend | `backend/.env` | Discloud dashboard |
+| Frontend | `.env` | Host dashboard or `.env.local` |
+| Backend | `backend/.env.example` | Your API host / `.env` |
 
 ---
 
-## 📁 Project structure
+## Project structure
 
 ```
 ├── src/              # React frontend
-├── backend/          # WebSocket API (Discloud)
+├── backend/          # WebSocket API
 ├── plugins/          # Vite plugins (local dev)
 ├── server/           # Optional monolith server
-├── scripts/          # Tunnel + Discloud zip utilities
+├── scripts/          # Tunnel and packaging utilities
 └── DEPLOY.md         # Deploy guide
 ```
 
 ---
 
-## 🛠️ Stack
+## Stack
 
 React 19 · TypeScript · Vite 8 · Tailwind CSS 4 · Zustand · WebSocket (ws) · YouTube IFrame API
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Issues and pull requests are welcome. Fork, branch, commit, and open a PR.
 
 ---
 
-## 📄 License
+## License
 
 [MIT](./LICENSE) © 2026 Kodexa Labs
 

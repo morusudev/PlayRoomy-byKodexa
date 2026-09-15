@@ -4,7 +4,7 @@
 
 by **[Kodexa](https://kodexalabs.com.br)**
 
-Crie uma sala, mande o link e assista com quem quiser. Play, pause, seek e playlist no mesmo tempo para todo mundo. Sem app, sem cadastro, direto no navegador.
+Crie uma sala, mande o link e assista com quem quiser. Play, pause, seek e playlist no mesmo tempo para todo mundo. Sem app, sem cadastro — direto no navegador.
 
 🌐 **Ao vivo:** [playroomy.vercel.app](https://playroomy.vercel.app)
 
@@ -12,7 +12,7 @@ Crie uma sala, mande o link e assista com quem quiser. Play, pause, seek e playl
 
 ---
 
-## 🎬 O que é
+## O que é
 
 O PlayRoomy é um app web para maratonar YouTube com amigos. Um host cria a sala, os convidados entram pelo link e o vídeo fica sincronizado em tempo real.
 
@@ -20,27 +20,27 @@ Funciona em celular, tablet e PC. Ideal para grupos no WhatsApp, Discord ou call
 
 ---
 
-## ✨ O que dá pra fazer
+## O que dá pra fazer
 
 | Recurso | Detalhe |
 |---------|---------|
-| 🔄 Sync em tempo real | Play, pause e seek sincronizados |
-| 🔗 Convite por link | Um link, qualquer dispositivo |
-| 📋 Playlist compartilhada | Fila de vídeos para a sala inteira |
-| 💬 Chat ao vivo | Mensagens enquanto assistem |
-| 🔒 Sala com senha | Privacidade opcional |
-| ⌨️ Atalhos de teclado | Controle rápido no player |
-| 📱 Mobile friendly | Layout pensado pro celular |
+| Sync em tempo real | Play, pause e seek sincronizados |
+| Convite por link | Um link, qualquer dispositivo |
+| Playlist compartilhada | Fila de vídeos para a sala inteira |
+| Chat e reações | Mensagens enquanto assistem |
+| Sala com senha | Privacidade opcional |
+| Atalhos de teclado | Controle rápido no player |
+| Mobile friendly | Layout pensado pro celular |
 
 ---
 
-## 🏗️ Como funciona
+## Como funciona
 
 ```
-Frontend (Vercel)          Backend (Discloud)
-     │                            │
-     │    WebSocket /roomy-ws     │
-     └────────────────────────────┘
+Frontend                     Backend (API WebSocket)
+     │                              │
+     │     WebSocket /roomy-ws      │
+     └──────────────────────────────┘
               Salas em memória
 ```
 
@@ -49,7 +49,7 @@ O **backend** é Node.js + WebSocket (`ws`). Sem banco de dados: as salas existe
 
 ---
 
-## 🚀 Rodar localmente
+## Rodar localmente
 
 **Requisitos:** Node.js 20+
 
@@ -77,64 +77,70 @@ Gera um link público temporário enquanto seu PC estiver ligado.
 
 ---
 
-## 📦 Deploy em produção
+## Deploy em produção
 
-### Frontend → Vercel
+### Frontend
 
-Conecte o repositório na Vercel. O `.vercelignore` já exclui `backend/` do upload.
+Faça deploy do app Vite (ex.: Vercel). O `.vercelignore` já exclui `backend/` do upload.
 
 **Build:** `npm run build`  
 **Output:** `dist`
 
-Configure as variáveis no painel da Vercel (não commite valores reais no Git).
+Configure as variáveis no painel do host (não commite valores reais no Git).
 
-### Backend → Discloud
+Aponte `VITE_WS_URL` para a origem WebSocket do backend (o app adiciona `/roomy-ws` quando precisar).
+
+### Backend
+
+Rode a API em `backend/` em qualquer host com processo Node persistente e suporte a WebSocket.
 
 ```bash
-npm run pack:discloud
+cd backend
+npm install
+npm run dev
 ```
 
-Envie o `playroomy-discloud.zip` na Discloud (plano Platinum+, 512 MB).
+Veja `backend/.env.example` para as variáveis (`PORT`, `ALLOWED_ORIGINS`, limites de sala, etc.).
 
-Guia completo: [DEPLOY.md](./DEPLOY.md)
+Mais detalhes: [DEPLOY.md](./DEPLOY.md) · [backend/README.md](./backend/README.md)
 
 ---
 
-## ⚙️ Variáveis de ambiente
+## Variáveis de ambiente
 
 | Camada | Arquivo de referência | Onde configurar |
 |--------|----------------------|-----------------|
-| Frontend | `.env` | Painel Vercel ou `.env.local` |
-| Backend | `backend/.env` | Painel Discloud |
+| Frontend | `.env` | Painel do host ou `.env.local` |
+| Backend | `backend/.env.example` | Host da API / `.env` |
 
 ---
 
-## 📁 Estrutura do projeto
+## Estrutura do projeto
 
 ```
 ├── src/              # Frontend React
-├── backend/          # API WebSocket (Discloud)
+├── backend/          # API WebSocket
 ├── plugins/          # Plugins Vite (dev local)
 ├── server/           # Servidor monolito (opcional)
-├── scripts/          # Utilitários (tunnel, zip Discloud)
+├── scripts/          # Utilitários (tunnel, empacote)
 └── DEPLOY.md         # Guia de deploy
 ```
 
 ---
 
-## 🛠️ Stack
+## Stack
 
 React 19 · TypeScript · Vite 8 · Tailwind CSS 4 · Zustand · WebSocket (ws) · YouTube IFrame API
 
 ---
 
-## 🤝 Contribuir
+## Contribuir
 
 Issues e PRs são bem vindos. Fork, branch, commit e abra um pull request.
 
 ---
 
-## 📄 Licença
+## Licença
 
 [MIT](./LICENSE) © 2026 Kodexa Labs
 

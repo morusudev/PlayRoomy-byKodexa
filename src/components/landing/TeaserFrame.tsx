@@ -1,40 +1,67 @@
-import { useEffect, useState } from 'react'
-import {
-  MessageCircle,
-  Pause,
-  Play,
-  Radio,
-  Users,
-  Zap,
-} from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { MessageCircle, Pause, Play, Radio, Users } from 'lucide-react'
 import { REACTION_OPTIONS } from '../../constants/reactions'
 import type { ReactionKind } from '../../types'
 import { cn } from '../../lib/cn'
 
 const PARTICIPANTS = [
-  { name: 'Ana', tone: 'bg-emerald-400', active: true },
-  { name: 'Leo', tone: 'bg-sky-400', active: true },
-  { name: 'Você', tone: 'bg-accent-bright', active: true },
+  { name: 'Ana', tone: 'bg-[#7dffb8]', initial: 'A' },
+  { name: 'Leo', tone: 'bg-[#9ad4ff]', initial: 'L' },
+  { name: 'Você', tone: 'bg-accent-bright', initial: 'V' },
 ] as const
 
 const CHAT_LINES = [
-  { user: 'Ana', text: 'bora maratonar essa série', accent: true },
-  { user: 'Leo', text: 'já coloquei o próximo na fila', accent: false },
-  { user: 'Ana', text: 'perfeito, sync tá liso', accent: true },
+  { user: 'Ana', text: 'abre o próximo, sync tá impecável' },
+  { user: 'Leo', text: 'já tá na fila' },
+  { user: 'Você', text: 'pausei. todo mundo no mesmo frame?' },
 ] as const
 
 export function TeaserFrame() {
+  const shellRef = useRef<HTMLDivElement>(null)
   const [playing, setPlaying] = useState(true)
   const [chatIndex, setChatIndex] = useState(0)
   const [reaction, setReaction] = useState<ReactionKind | null>(null)
+  const [scrub, setScrub] = useState(42)
 
   useEffect(() => {
     if (!playing) return undefined
-    const timer = window.setInterval(() => {
+    const chatTimer = window.setInterval(() => {
       setChatIndex((i) => (i + 1) % CHAT_LINES.length)
-    }, 3200)
-    return () => window.clearInterval(timer)
+    }, 3400)
+    const scrubTimer = window.setInterval(() => {
+      setScrub((v) => (v >= 78 ? 28 : v + 0.35))
+    }, 120)
+    return () => {
+      window.clearInterval(chatTimer)
+      window.clearInterval(scrubTimer)
+    }
   }, [playing])
+
+  useEffect(() => {
+    const shell = shellRef.current
+    if (!shell) return undefined
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reduced) return undefined
+
+    const onMove = (event: PointerEvent) => {
+      const rect = shell.getBoundingClientRect()
+      const px = (event.clientX - rect.left) / rect.width - 0.5
+      const py = (event.clientY - rect.top) / rect.height - 0.5
+      shell.style.setProperty('--tilt-x', `${(py * -6).toFixed(2)}deg`)
+      shell.style.setProperty('--tilt-y', `${(px * 8).toFixed(2)}deg`)
+    }
+    const onLeave = () => {
+      shell.style.setProperty('--tilt-x', '0deg')
+      shell.style.setProperty('--tilt-y', '0deg')
+    }
+
+    shell.addEventListener('pointermove', onMove)
+    shell.addEventListener('pointerleave', onLeave)
+    return () => {
+      shell.removeEventListener('pointermove', onMove)
+      shell.removeEventListener('pointerleave', onLeave)
+    }
+  }, [])
 
   const triggerReaction = (id: ReactionKind) => {
     setReaction(id)
@@ -45,44 +72,53 @@ export function TeaserFrame() {
   const activeReaction = REACTION_OPTIONS.find((item) => item.id === reaction)
 
   return (
-    <div className="teaser-frame w-full max-w-lg animate-fade-up animate-delay-3">
-      <div className="teaser-shell relative rounded-2xl border border-accent/25 overflow-hidden shadow-[0_24px_80px_-20px_rgba(61,214,140,0.3)] backdrop-blur-md transition-shadow duration-300 hover:shadow-[0_28px_90px_-20px_rgba(107,255,179,0.38)]">
-        <div className="teaser-shell-glow" aria-hidden />
+    <div className="landing-stage w-full">
+      <div
+        ref={shellRef}
+        className="landing-stage-shell relative overflow-hidden"
+      >
+        <div className="landing-stage-rim" aria-hidden />
 
-        <div className="relative flex items-center justify-between px-4 py-3 border-b border-white/8 bg-black/35">
-          <span className="flex items-center gap-2.5">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-70" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500 animate-live-dot" />
-            </span>
-            <span className="text-[10px] uppercase tracking-[0.16em] text-white/70 font-bold">
+        <header className="relative z-[1] flex items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-white/[0.06]">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="landing-live-dot" />
+            <span className="text-[11px] font-semibold tracking-[0.14em] uppercase text-white/55 truncate">
               Sala ao vivo
             </span>
-          </span>
-          <div className="flex items-center gap-2">
-            <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent/15 text-[9px] font-bold text-accent-bright uppercase tracking-wide">
-              <Zap className="w-3 h-3" />
-              Sync
+          </div>
+          <div className="flex items-center gap-3 text-[11px] text-white/50 font-medium tabular-nums">
+            <span className="inline-flex items-center gap-1.5 text-accent-bright/90">
+              <Radio className="w-3 h-3" />
+              sync
             </span>
-            <span className="inline-flex items-center gap-1 text-[10px] text-accent-bright font-bold tabular-nums">
+            <span className="inline-flex items-center gap-1">
               <Users className="w-3 h-3" />
               3
             </span>
           </div>
-        </div>
+        </header>
 
-        <div className="relative aspect-video sm:aspect-[16/10] overflow-hidden bg-[#050506]">
-          <div className="teaser-video-bg absolute inset-0" />
-          <div className="absolute inset-0 teaser-scanlines opacity-25" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/20" />
+        <div className="relative aspect-[16/10] sm:aspect-[16/9] overflow-hidden bg-[#050607]">
+          <div className="landing-stage-screen absolute inset-0" />
+          <div className="landing-stage-noise absolute inset-0 opacity-[0.35]" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-black/40" />
+
+          <div className="absolute left-4 top-4 sm:left-5 sm:top-5 z-[1]">
+            <p className="font-display text-[13px] sm:text-sm font-semibold tracking-tight text-white/90">
+              Session · Friday Night
+            </p>
+            <p className="text-[10px] sm:text-[11px] text-white/40 mt-0.5 tracking-wide">
+              Hosted with PlayRoomy
+            </p>
+          </div>
 
           {playing && (
-            <div className="absolute inset-x-0 bottom-16 flex items-end justify-center gap-1 px-8 h-12 pointer-events-none">
-              {Array.from({ length: 12 }).map((_, i) => (
+            <div className="absolute inset-x-0 bottom-[4.5rem] flex items-end justify-center gap-[3px] px-10 h-10 pointer-events-none opacity-70">
+              {Array.from({ length: 16 }).map((_, i) => (
                 <span
                   key={i}
-                  className="teaser-bar w-1 rounded-full bg-accent-bright/80"
-                  style={{ animationDelay: `${i * 0.08}s` }}
+                  className="landing-eq-bar w-[2px] sm:w-[3px] rounded-full bg-accent-bright"
+                  style={{ animationDelay: `${i * 0.07}s` }}
                 />
               ))}
             </div>
@@ -91,72 +127,57 @@ export function TeaserFrame() {
           <button
             type="button"
             onClick={() => setPlaying((p) => !p)}
-            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 group"
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[2] group"
             aria-label={playing ? 'Pausar preview' : 'Reproduzir preview'}
           >
-            <span className="absolute inset-0 rounded-full bg-accent-bright/20 blur-xl scale-150 opacity-60 group-hover:opacity-90 transition-opacity" />
-            <span className="relative flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-full border border-white/25 bg-black/45 backdrop-blur-md transition-transform duration-300 group-hover:scale-105 group-active:scale-95">
+            <span className="landing-play-btn relative flex h-14 w-14 sm:h-[4.25rem] sm:w-[4.25rem] items-center justify-center rounded-full">
               {playing ? (
-                <Pause className="w-6 h-6 sm:w-7 sm:h-7 text-accent-bright fill-accent-bright/20" />
+                <Pause className="w-5 h-5 sm:w-6 sm:h-6 text-black fill-black/20" />
               ) : (
-                <Play className="w-6 h-6 sm:w-7 sm:h-7 text-accent-bright fill-accent-bright ml-0.5" />
+                <Play className="w-5 h-5 sm:w-6 sm:h-6 text-black fill-black ml-0.5" />
               )}
             </span>
           </button>
 
           {activeReaction && (
-            <span className="teaser-reaction absolute right-6 top-8" key={activeReaction.id}>
+            <span className="landing-reaction absolute right-7 top-10 z-[2]" key={activeReaction.id}>
               <activeReaction.Icon className="w-7 h-7 text-accent-bright" strokeWidth={2.25} />
             </span>
           )}
 
-          <div className="absolute inset-x-0 bottom-0 px-4 pb-3 pt-12 bg-gradient-to-t from-black/90 to-transparent">
-            <div className="h-1.5 rounded-full bg-white/10 overflow-hidden mb-2">
+          <div className="absolute inset-x-0 bottom-0 px-4 sm:px-5 pb-3.5 pt-10 bg-gradient-to-t from-black to-transparent z-[1]">
+            <div className="h-[3px] rounded-full bg-white/10 overflow-hidden mb-2">
               <div
-                className={cn(
-                  'h-full rounded-full bg-gradient-to-r from-accent to-accent-bright teaser-progress',
-                  playing ? 'teaser-progress-active' : '',
-                )}
+                className="h-full rounded-full bg-accent-bright"
+                style={{ width: `${scrub}%`, boxShadow: '0 0 12px rgba(107,255,179,0.45)' }}
               />
             </div>
-            <div className="flex items-center justify-between text-[10px] text-white/60 tabular-nums font-medium">
+            <div className="flex items-center justify-between text-[10px] text-white/45 tabular-nums font-medium tracking-wide">
               <span>4:20</span>
-              <span className="inline-flex items-center gap-1 text-accent-bright/90">
-                <Radio className="w-3 h-3" />
-                {playing ? 'Reproduzindo' : 'Pausado'}
-              </span>
+              <span className="text-accent-bright/80">{playing ? 'ao vivo' : 'pausado'}</span>
               <span>12:08</span>
             </div>
           </div>
         </div>
 
-        <div className="relative px-4 py-3.5 border-t border-white/8 bg-black/40 space-y-3">
+        <div className="relative z-[1] px-4 sm:px-5 py-3.5 border-t border-white/[0.06] space-y-3 bg-black/40">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-1.5 flex-wrap">
-              {PARTICIPANTS.map((person, i) => (
-                <button
+              {PARTICIPANTS.map((person) => (
+                <span
                   key={person.name}
-                  type="button"
-                  className={cn(
-                    'teaser-avatar group/avatar relative flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full border transition-all duration-300',
-                    person.active
-                      ? 'border-accent/30 bg-white/5 hover:border-accent-bright/50 hover:bg-accent/10'
-                      : 'border-white/10 bg-white/5 opacity-60',
-                  )}
-                  style={{ animationDelay: `${0.4 + i * 0.1}s` }}
+                  className="inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full border border-white/[0.08] bg-white/[0.03]"
                 >
                   <span
                     className={cn(
-                      'flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-black',
+                      'flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold text-black',
                       person.tone,
                     )}
                   >
-                    {person.name[0]}
+                    {person.initial}
                   </span>
-                  <span className="text-[10px] font-semibold text-white/80 group-hover/avatar:text-white">
-                    {person.name}
-                  </span>
-                </button>
+                  <span className="text-[10px] font-medium text-white/70">{person.name}</span>
+                </span>
               ))}
             </div>
             <div className="flex items-center gap-1 self-end sm:self-auto">
@@ -165,7 +186,7 @@ export function TeaserFrame() {
                   key={id}
                   type="button"
                   onClick={() => triggerReaction(id)}
-                  className="h-8 w-8 rounded-lg flex items-center justify-center text-accent-bright/85 bg-white/5 border border-white/10 hover:border-accent-bright/40 hover:bg-accent/10 hover:text-accent-bright hover:scale-105 active:scale-95 transition-all duration-200"
+                  className="h-8 w-8 rounded-lg flex items-center justify-center text-white/55 bg-white/[0.04] border border-white/[0.08] hover:text-accent-bright hover:border-accent/40 hover:bg-accent/10 active:scale-95 transition-all duration-200"
                   aria-label={`Reagir: ${label}`}
                 >
                   <Icon className="w-3.5 h-3.5" strokeWidth={2.25} />
@@ -174,17 +195,11 @@ export function TeaserFrame() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-white/8 bg-black/30 px-3 py-2.5 min-h-[52px] flex items-start gap-2">
-            <MessageCircle className="w-3.5 h-3.5 text-accent-bright shrink-0 mt-0.5" />
-            <p key={chatIndex} className="teaser-chat-line text-xs text-white/75 leading-relaxed">
-              <span
-                className={cn(
-                  'font-bold',
-                  currentChat.accent ? 'text-accent-bright' : 'text-white/90',
-                )}
-              >
-                {currentChat.user}:
-              </span>{' '}
+          <div className="rounded-xl border border-white/[0.06] bg-black/35 px-3 py-2.5 min-h-[48px] flex items-start gap-2">
+            <MessageCircle className="w-3.5 h-3.5 text-accent-bright/80 shrink-0 mt-0.5" />
+            <p key={chatIndex} className="landing-chat-line text-xs text-white/65 leading-relaxed">
+              <span className="font-semibold text-white/90">{currentChat.user}</span>
+              <span className="text-white/30"> · </span>
               {currentChat.text}
             </p>
           </div>
